@@ -50,6 +50,7 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete }: {
   const isWaiting = task.status === 'waiting';
   const sourceIcon = task.source === 'webhook_line' ? 'LINE' : task.source === 'webhook_slack' ? 'Slack' : '';
   const hasStarted = !!task.started_at;
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   const saveEdit = () => {
     if (editTitle.trim() && editTitle.trim() !== task.title) {
@@ -88,7 +89,11 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete }: {
           {isWaiting && sourceIcon && <span className="mr-1 font-medium text-stone-400">{sourceIcon}:</span>}
           {task.category && <span className="mr-2">{CATEGORY_LABEL[task.category] ?? task.category}</span>}
           {task.assignee !== 'yuuki' && <span className="mr-2 text-blue-400">→ {task.assignee}</span>}
-          {isWaiting ? formatDate(task.created_at) : task.due_date === new Date().toISOString().slice(0, 10) ? '締切 今日' : ''}
+          {isWaiting
+            ? formatDate(task.created_at)
+            : task.due_date
+              ? <span className={task.due_date <= todayStr ? 'text-red-400' : 'text-stone-400'}>締切 {task.due_date === todayStr ? '今日' : task.due_date}</span>
+              : ''}
           {hasStarted && <span className="ml-2 text-green-600 text-xs">▶ 開始済み</span>}
           {task.permalink && <a href={task.permalink} target="_blank" rel="noopener noreferrer" className="ml-2 text-stone-600 hover:text-stone-400 transition-colors">↗</a>}
         </p>
@@ -127,9 +132,10 @@ export default function Board() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [showDone, setShowDone] = useState(false);
+  const [showSomeday, setShowSomeday] = useState(false);
+  const [activeTab, setActiveTab] = useState<'today' | 'upcoming'>('today');
   const [newTitle, setNewTitle] = useState('');
   const [newPriority, setNewPriority] = useState<TaskPriority>('medium');
-  const [newCategory, setNewCategory] = useState<TaskCategory | ''>('');
 
   useEffect(() => {
     const load = async () => {
@@ -146,11 +152,12 @@ export default function Board() {
     load();
   }, []);
 
+  const todayStr = new Date().toISOString().slice(0, 10);
   const today = tasks.filter(t => t.status === 'today' && !t.due_date);
   const waiting = tasks.filter(t => t.status === 'waiting');
   const inProgress = tasks.filter(t => t.status === 'in_progress');
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const upcoming = tasks.filter(t => t.due_date && t.status !== 'done' && t.due_date > todayStr).sort((a, b) => (a.due_date ?? '') < (b.due_date ?? '') ? -1 : 1).slice(0, 3);
+  const someday = tasks.filter(t => t.status === 'someday');
+  const upcoming = tasks.filter(t => t.due_date && t.status !== 'done' && t.due_date >= todayStr).sort((a, b) => (a.due_date ?? '') < (b.due_date ?? '') ? -1 : 1);
 
   const markDone = useCallback(async (id: string) => {
     const res = await fetch(`/api/tasks?id=${id}`, {
@@ -205,7 +212,6 @@ export default function Board() {
       priority: newPriority,
       assignee: 'yuuki',
       source: 'manual' as TaskSource,
-      category: newCategory || null,
     };
     const res = await fetch('/api/tasks', {
       method: 'POST',
@@ -216,7 +222,7 @@ export default function Board() {
       const created: Task = await res.json();
       setTasks(ts => [created, ...ts]);
     }
-    setNewTitle(''); setNewPriority('medium'); setNewCategory(''); setShowAdd(false);
+    setNewTitle(''); setNewPriority('medium'); setShowAdd(false);
   };
 
   return (
@@ -254,10 +260,6 @@ export default function Board() {
               <option value="medium">🟡 中</option>
               <option value="low">🟢 低</option>
             </select>
-            <select value={newCategory} onChange={e => setNewCategory(e.target.value as TaskCategory | '')} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200">
-              <option value="">カテゴリ</option>
-              {Object.entries(CATEGORY_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
             <button onClick={addTask} className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white">追加</button>
             <button onClick={() => setShowAdd(false)} className="text-xs px-3 py-1.5 text-stone-400 hover:text-stone-200">キャンセル</button>
           </div>
@@ -267,7 +269,7 @@ export default function Board() {
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-44 flex-shrink-0 border-r border-stone-700 bg-stone-800 min-h-screen pt-4 hidden md:block">
-          {([['today', '今日のタスク', today.length], ['waiting', '返信待ち', waiting.length], ['in_progress', '進行中', inProgress.length], ['upcoming', '締切が近い', upcoming.length], ['someday', 'いつか', 0]] as [string, string, number][]).map(([k, label, count]) => (
+          {([['today', '今日のタスク', today.length], ['waiting', '返信待ち', waiting.length], ['in_progress', '進行中', inProgress.length], ['upcoming', '締切が近い', upcoming.length], ['someday', 'いつか', someday.length]] as [string, string, number][]).map(([k, label, count]) => (
             <div key={k} className="flex items-center justify-between px-4 py-2.5 text-sm text-stone-400 hover:bg-stone-700 cursor-pointer">
               <span>{label}</span>
               {count > 0 && <span className="text-xs bg-stone-700 text-stone-400 px-1.5 py-0.5 rounded-full">{count}</span>}
@@ -302,16 +304,38 @@ export default function Board() {
                 </section>
               )}
 
-              {/* 今日のタスク */}
-              <section className="mb-8">
-                <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
+              {/* タブ: 今日のタスク / 締切が近い */}
+              <div className="flex gap-0 mb-6 border-b border-stone-700">
+                <button
+                  onClick={() => setActiveTab('today')}
+                  className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${activeTab === 'today' ? 'text-stone-100 border-stone-300' : 'text-stone-500 border-transparent hover:text-stone-300'}`}
+                >
                   📋 今日のタスク
-                  <span className="ml-2 text-stone-600 font-normal normal-case">({today.length})</span>
-                </h2>
-                {today.length === 0
-                  ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
-                  : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
-                }
+                </button>
+                <button
+                  onClick={() => setActiveTab('upcoming')}
+                  className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${activeTab === 'upcoming' ? 'text-stone-100 border-stone-300' : 'text-stone-500 border-transparent hover:text-stone-300'}`}
+                >
+                  🗓 締切が近い
+                  {upcoming.length > 0 && (
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${activeTab === 'upcoming' ? 'bg-stone-600 text-stone-200' : 'bg-red-900/70 text-red-300'}`}>
+                      {upcoming.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* タブコンテンツ */}
+              <section className="mb-8">
+                {activeTab === 'today' ? (
+                  today.length === 0
+                    ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
+                    : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
+                ) : (
+                  upcoming.length === 0
+                    ? <p className="text-sm text-stone-600 py-4 text-center">締切のタスクなし</p>
+                    : upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
+                )}
               </section>
 
               {/* 返信待ち */}
@@ -337,11 +361,18 @@ export default function Board() {
                 </section>
               )}
 
-              {/* 締切が近い */}
-              {upcoming.length > 0 && (
+              {/* いつか（折りたたみ） */}
+              {someday.length > 0 && (
                 <section className="mb-8">
-                  <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">🗓 締切が近い</h2>
-                  {upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)}
+                  <button
+                    onClick={() => setShowSomeday(v => !v)}
+                    className="flex items-center gap-2 text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3 w-full text-left"
+                  >
+                    🗂 いつか
+                    <span className="text-stone-600 font-normal normal-case">（{someday.length}件）</span>
+                    <span className="ml-auto">{showSomeday ? '▼' : '◀︎'}</span>
+                  </button>
+                  {showSomeday && someday.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)}
                 </section>
               )}
 
