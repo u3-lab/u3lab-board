@@ -2,12 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { Task } from '@/lib/types';
 
-// GET /api/tasks?status=today
+// GET /api/tasks                    → non-archived tasks
+// GET /api/tasks?completed_today=true → today's done tasks (JST)
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get('status');
+  const completedToday = searchParams.get('completed_today') === 'true';
 
   const db = supabaseAdmin();
+
+  if (completedToday) {
+    const jstDate = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    const todayStartUtc = new Date(`${jstDate}T00:00:00+09:00`).toISOString();
+    const { data, error } = await db
+      .from('tasks')
+      .select('*')
+      .not('archived_at', 'is', null)
+      .gte('completed_at', todayStartUtc)
+      .order('completed_at', { ascending: false });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data ?? []);
+  }
+
   let query = db
     .from('tasks')
     .select('*')
@@ -19,7 +35,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+  return NextResponse.json(data ?? []);
 }
 
 // POST /api/tasks

@@ -1,6 +1,6 @@
 'use client';
-import { useState, useCallback } from 'react';
-import type { Task, TaskStatus, TaskPriority, TaskCategory } from '@/lib/types';
+import { useState, useCallback, useEffect } from 'react';
+import type { Task, TaskStatus, TaskPriority, TaskCategory, TaskSource } from '@/lib/types';
 
 const PRIORITY_ICON: Record<TaskPriority, string> = { high: '🔴', medium: '🟡', low: '🟢' };
 const CATEGORY_LABEL: Record<string, string> = {
@@ -15,16 +15,6 @@ type MockSchedule = { id: string; title: string; start: string; end?: string; ca
 const MOCK_SCHEDULES: MockSchedule[] = [
   { id: 's1', title: '朝ミーティング（チーム）', start: '09:00', end: '09:30', category: 'u3lab' },
   { id: 's2', title: '写真塾オンライン相談', start: '14:00', end: '15:00', category: 'photo' },
-];
-
-const MOCK_TASKS: Task[] = [
-  { id: '1', title: '写真レビュー返信（○○さん）', status: 'today', priority: 'high', due_date: new Date().toISOString().slice(0, 10), assignee: 'yuuki', source: 'manual', category: 'photo', created_at: new Date().toISOString() },
-  { id: '2', title: 'LINEシナリオ確認', status: 'today', priority: 'medium', assignee: 'yuuki', source: 'manual', category: 'sns', created_at: new Date().toISOString() },
-  { id: '3', title: '経費申請確認（6月分）', status: 'today', priority: 'low', assignee: 'yuuki', source: 'manual', category: 'u3lab', created_at: new Date().toISOString() },
-  { id: '4', title: '受講生○○さん → 質問あり', status: 'waiting', priority: 'high', assignee: 'yuuki', source: 'webhook_line', category: 'photo', created_at: new Date(Date.now() - 86400000).toISOString() },
-  { id: '5', title: '光 → SNS投稿確認待ち', status: 'waiting', priority: 'medium', assignee: 'yuuki', source: 'webhook_slack', category: 'sns', created_at: new Date(Date.now() - 7200000).toISOString() },
-  { id: '6', title: 'IG投稿スケジュール見直し', status: 'in_progress', priority: 'medium', assignee: 'saku', source: 'manual', category: 'sns', created_at: new Date().toISOString() },
-  { id: '7', title: '朝のメール確認・返信', status: 'done', priority: 'medium', assignee: 'yuuki', source: 'manual', category: 'other', created_at: new Date().toISOString(), completed_at: new Date().toISOString(), archived_at: new Date().toISOString() },
 ];
 
 function formatDate(iso: string) {
@@ -75,37 +65,66 @@ function TaskRow({ task, onDone }: { task: Task; onDone: (id: string) => void })
 }
 
 export default function Board() {
-  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [doneTasks, setDoneTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [showDone, setShowDone] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newPriority, setNewPriority] = useState<TaskPriority>('medium');
   const [newCategory, setNewCategory] = useState<TaskCategory | ''>('');
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const today = tasks.filter(t => t.status === 'today' && !t.archived_at);
-  const todayDone = tasks.filter(t => t.status === 'done' && t.completed_at && t.completed_at.startsWith(todayStr));
-  const waiting = tasks.filter(t => t.status === 'waiting' && !t.archived_at);
-  const inProgress = tasks.filter(t => t.status === 'in_progress' && !t.archived_at);
-  const upcoming = tasks.filter(t => t.due_date && !t.archived_at && t.status !== 'done' && t.due_date > new Date().toISOString().slice(0, 10)).sort((a, b) => (a.due_date ?? '') < (b.due_date ?? '') ? -1 : 1).slice(0, 3);
-
-  const markDone = useCallback((id: string) => {
-    setTasks(ts => ts.map(t => t.id === id ? { ...t, status: 'done', completed_at: new Date().toISOString(), archived_at: new Date().toISOString() } : t));
+  useEffect(() => {
+    const load = async () => {
+      const [active, done] = await Promise.all([
+        fetch('/api/tasks').then(r => r.json()),
+        fetch('/api/tasks?completed_today=true').then(r => r.json()),
+      ]);
+      setTasks(Array.isArray(active) ? active : []);
+      setDoneTasks(Array.isArray(done) ? done : []);
+      setLoading(false);
+    };
+    load();
   }, []);
 
-  const addTask = () => {
+  const today = tasks.filter(t => t.status === 'today');
+  const waiting = tasks.filter(t => t.status === 'waiting');
+  const inProgress = tasks.filter(t => t.status === 'in_progress');
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const upcoming = tasks.filter(t => t.due_date && t.status !== 'done' && t.due_date > todayStr).sort((a, b) => (a.due_date ?? '') < (b.due_date ?? '') ? -1 : 1).slice(0, 3);
+
+  const markDone = useCallback(async (id: string) => {
+    const res = await fetch(`/api/tasks?id=${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'done' }),
+    });
+    if (res.ok) {
+      const updated: Task = await res.json();
+      setTasks(ts => ts.filter(t => t.id !== id));
+      setDoneTasks(ds => [updated, ...ds]);
+    }
+  }, []);
+
+  const addTask = async () => {
     if (!newTitle.trim()) return;
-    const t: Task = {
-      id: crypto.randomUUID(),
+    const body = {
       title: newTitle.trim(),
-      status: 'today',
+      status: 'today' as TaskStatus,
       priority: newPriority,
       assignee: 'yuuki',
-      source: 'manual',
+      source: 'manual' as TaskSource,
       category: newCategory || null,
-      created_at: new Date().toISOString(),
     };
-    setTasks(ts => [t, ...ts]);
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      const created: Task = await res.json();
+      setTasks(ts => [created, ...ts]);
+    }
     setNewTitle(''); setNewPriority('medium'); setNewCategory(''); setShowAdd(false);
   };
 
@@ -168,89 +187,91 @@ export default function Board() {
 
         {/* Main */}
         <main className="flex-1 p-6 max-w-3xl">
-          {/* 今日のスケジュール */}
-          <section className="mb-8">
-            <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
-              📅 今日のスケジュール
-              <span className="ml-2 text-stone-600 font-normal normal-case text-xs">（Googleカレンダー連携 Phase1後半）</span>
-            </h2>
-            {MOCK_SCHEDULES.map(s => (
-              <div key={s.id} className="flex items-center gap-3 py-2 border-b border-stone-700">
-                <span className="text-xs text-stone-500 w-20 flex-shrink-0 tabular-nums">{s.start}{s.end ? `〜${s.end}` : ''}</span>
-                <p className="text-sm text-stone-300 truncate">{s.title}</p>
-                {s.category && <span className="text-xs text-stone-600 flex-shrink-0">{CATEGORY_LABEL[s.category] ?? s.category}</span>}
-              </div>
-            ))}
-          </section>
+          {loading ? (
+            <p className="text-sm text-stone-600 text-center py-12">読み込み中...</p>
+          ) : (
+            <>
+              {/* 今日のスケジュール */}
+              <section className="mb-8">
+                <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
+                  📅 今日のスケジュール
+                  <span className="ml-2 text-stone-600 font-normal normal-case text-xs">（GCal連携 Phase1後半）</span>
+                </h2>
+                {MOCK_SCHEDULES.map(s => (
+                  <div key={s.id} className="flex items-center gap-3 py-2 border-b border-stone-700">
+                    <span className="text-xs text-stone-500 w-20 flex-shrink-0 tabular-nums">{s.start}{s.end ? `〜${s.end}` : ''}</span>
+                    <p className="text-sm text-stone-300 truncate">{s.title}</p>
+                    {s.category && <span className="text-xs text-stone-600 flex-shrink-0">{CATEGORY_LABEL[s.category] ?? s.category}</span>}
+                  </div>
+                ))}
+              </section>
 
-          {/* 今日のタスク */}
-          <section className="mb-8">
-            <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
-              📋 今日のタスク
-              <span className="ml-2 text-stone-600 font-normal normal-case">({today.length})</span>
-            </h2>
-            {today.length === 0
-              ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
-              : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)
-            }
-          </section>
+              {/* 今日のタスク */}
+              <section className="mb-8">
+                <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
+                  📋 今日のタスク
+                  <span className="ml-2 text-stone-600 font-normal normal-case">({today.length})</span>
+                </h2>
+                {today.length === 0
+                  ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
+                  : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)
+                }
+              </section>
 
-          {/* 返信待ち */}
-          <section className="mb-8">
-            <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
-              📨 返信待ち
-              <span className="ml-2 text-stone-600 font-normal normal-case">({waiting.length})</span>
-            </h2>
-            {waiting.length === 0
-              ? <p className="text-sm text-stone-600 py-4 text-center">なし</p>
-              : waiting.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)
-            }
-          </section>
+              {/* 返信待ち */}
+              <section className="mb-8">
+                <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
+                  📨 返信待ち
+                  <span className="ml-2 text-stone-600 font-normal normal-case">({waiting.length})</span>
+                </h2>
+                {waiting.length === 0
+                  ? <p className="text-sm text-stone-600 py-4 text-center">なし</p>
+                  : waiting.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)
+                }
+              </section>
 
-          {/* 進行中 */}
-          {inProgress.length > 0 && (
-            <section className="mb-8">
-              <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
-                ⚙️ 進行中
-                <span className="ml-2 text-stone-600 font-normal normal-case">({inProgress.length})</span>
-              </h2>
-              {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)}
-            </section>
+              {/* 進行中 */}
+              {inProgress.length > 0 && (
+                <section className="mb-8">
+                  <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
+                    ⚙️ 進行中
+                    <span className="ml-2 text-stone-600 font-normal normal-case">({inProgress.length})</span>
+                  </h2>
+                  {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)}
+                </section>
+              )}
+
+              {/* 締切が近い */}
+              {upcoming.length > 0 && (
+                <section className="mb-8">
+                  <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">🗓 締切が近い</h2>
+                  {upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)}
+                </section>
+              )}
+
+              {/* 今日の完了 */}
+              {doneTasks.length > 0 && (
+                <section className="mb-8">
+                  <button
+                    onClick={() => setShowDone(v => !v)}
+                    className="flex items-center gap-2 text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3 w-full text-left"
+                  >
+                    ✅ 今日の完了
+                    <span className="text-stone-600 font-normal normal-case">（{doneTasks.length}件）</span>
+                    <span className="ml-auto">{showDone ? '▲' : '▼'}</span>
+                  </button>
+                  {showDone && doneTasks.map(t => (
+                    <div key={t.id} className="flex items-center gap-3 py-2 border-b border-stone-700 opacity-40">
+                      <span className="w-5 h-5 rounded-full border-2 border-green-700 flex items-center justify-center flex-shrink-0">
+                        <span className="text-green-500 text-xs leading-none">✓</span>
+                      </span>
+                      <p className="text-sm text-stone-400 line-through truncate">{t.title}</p>
+                    </div>
+                  ))}
+                </section>
+              )}
+            </>
           )}
-
-          {/* 締切が近い */}
-          {upcoming.length > 0 && (
-            <section className="mb-8">
-              <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">🗓 締切が近い</h2>
-              {upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)}
-            </section>
-          )}
-
-          {/* 今日の完了 */}
-          {todayDone.length > 0 && (
-            <section className="mb-8">
-              <button
-                onClick={() => setShowDone(v => !v)}
-                className="flex items-center gap-2 text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3 w-full text-left"
-              >
-                ✅ 今日の完了
-                <span className="text-stone-600 font-normal normal-case">（{todayDone.length}件）</span>
-                <span className="ml-auto">{showDone ? '▲' : '▼'}</span>
-              </button>
-              {showDone && todayDone.map(t => (
-                <div key={t.id} className="flex items-center gap-3 py-2 border-b border-stone-700 opacity-40">
-                  <span className="w-5 h-5 rounded-full border-2 border-green-700 flex items-center justify-center flex-shrink-0">
-                    <span className="text-green-500 text-xs leading-none">✓</span>
-                  </span>
-                  <p className="text-sm text-stone-400 line-through truncate">{t.title}</p>
-                </div>
-              ))}
-            </section>
-          )}
-
-          <p className="text-xs text-stone-700 text-center pt-4">
-            ※ 現在はモックデータ表示中。Supabase接続後にリアルタイム同期されます。
-          </p>
         </main>
       </div>
     </div>
