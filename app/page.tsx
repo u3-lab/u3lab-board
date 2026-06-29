@@ -17,6 +17,7 @@ const MOCK_TASKS: Task[] = [
   { id: '4', title: '受講生○○さん → 質問あり', status: 'waiting', priority: 'high', assignee: 'yuuki', source: 'webhook_line', category: 'photo', created_at: new Date(Date.now() - 86400000).toISOString() },
   { id: '5', title: '光 → SNS投稿確認待ち', status: 'waiting', priority: 'medium', assignee: 'yuuki', source: 'webhook_slack', category: 'sns', created_at: new Date(Date.now() - 7200000).toISOString() },
   { id: '6', title: 'IG投稿スケジュール見直し', status: 'in_progress', priority: 'medium', assignee: 'saku', source: 'manual', category: 'sns', created_at: new Date().toISOString() },
+  { id: '7', title: '朝のメール確認・返信', status: 'done', priority: 'medium', assignee: 'yuuki', source: 'manual', category: 'other', created_at: new Date().toISOString(), completed_at: new Date().toISOString(), archived_at: new Date().toISOString() },
 ];
 
 function formatDate(iso: string) {
