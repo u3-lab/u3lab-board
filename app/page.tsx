@@ -338,7 +338,7 @@ export default function Board() {
                   >
                     ✅ 今日の完了
                     <span className="text-stone-600 font-normal normal-case">（{doneTasks.length}件）</span>
-                    <span className="ml-auto">{showDone ? '▼' : '▲'}</span>
+                    <span className="ml-auto">{showDone ? '▼' : '◀︎'}</span>
                   </button>
                   {showDone && doneTasks.map(t => (
                     <div key={t.id} className="flex items-center gap-3 py-2 border-b border-stone-700 opacity-40">
