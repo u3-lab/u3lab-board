@@ -38,12 +38,13 @@ function CheckCircle({ onDone }: { onDone: () => void }) {
   );
 }
 
-function TaskRow({ task, onDone, onStart, onEdit, onDelete }: {
+function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday }: {
   task: Task;
   onDone: (id: string) => void;
   onStart: (id: string) => void;
   onEdit: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  onMarkToday?: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
@@ -98,6 +99,15 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete }: {
           {task.permalink && <a href={task.permalink} target="_blank" rel="noopener noreferrer" className="ml-2 text-stone-600 hover:text-stone-400 transition-colors">↗</a>}
         </p>
       </div>
+      {onMarkToday && (
+        <button
+          onClick={() => onMarkToday(task.id)}
+          className="flex-shrink-0 text-xs px-2 py-1 rounded border border-stone-600 text-stone-500 hover:border-blue-500 hover:text-blue-400 transition-colors opacity-0 group-hover/row:opacity-100"
+          title="今日やる"
+        >
+          今日
+        </button>
+      )}
       <button
         onClick={() => setEditing(true)}
         className="flex-shrink-0 text-xs px-1.5 py-1 text-stone-700 hover:text-stone-400 transition-colors opacity-0 group-hover/row:opacity-100"
@@ -112,7 +122,7 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete }: {
       >
         🗑
       </button>
-      {!hasStarted && task.assignee === 'yuuki' && (
+      {!hasStarted && task.assignee === 'yuuki' && !onMarkToday && (
         <button
           onClick={() => onStart(task.id)}
           className="flex-shrink-0 text-xs px-2 py-1 rounded border border-stone-600 text-stone-500 hover:border-green-600 hover:text-green-500 transition-colors"
@@ -132,10 +142,11 @@ export default function Board() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [showDone, setShowDone] = useState(false);
-  const [showSomeday, setShowSomeday] = useState(false);
-  const [activeTab, setActiveTab] = useState<'today' | 'upcoming'>('today');
+  const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'someday'>('today');
   const [newTitle, setNewTitle] = useState('');
   const [newPriority, setNewPriority] = useState<TaskPriority>('medium');
+  const [newHasDueDate, setNewHasDueDate] = useState(false);
+  const [newDueDate, setNewDueDate] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -184,6 +195,18 @@ export default function Board() {
     }
   }, []);
 
+  const markToday = useCallback(async (id: string) => {
+    const res = await fetch(`/api/tasks?id=${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'today', due_date: null }),
+    });
+    if (res.ok) {
+      const updated: Task = await res.json();
+      setTasks(ts => ts.map(t => t.id === id ? updated : t));
+    }
+  }, []);
+
   const deleteTask = useCallback(async (id: string) => {
     const res = await fetch(`/api/tasks?id=${id}`, { method: 'DELETE' });
     if (res.ok) {
@@ -206,12 +229,13 @@ export default function Board() {
 
   const addTask = async () => {
     if (!newTitle.trim()) return;
-    const body = {
+    const body: Partial<Task> = {
       title: newTitle.trim(),
-      status: 'today' as TaskStatus,
+      status: newHasDueDate ? 'today' as TaskStatus : 'someday' as TaskStatus,
       priority: newPriority,
       assignee: 'yuuki',
       source: 'manual' as TaskSource,
+      ...(newHasDueDate && newDueDate ? { due_date: newDueDate } : {}),
     };
     const res = await fetch('/api/tasks', {
       method: 'POST',
@@ -222,8 +246,18 @@ export default function Board() {
       const created: Task = await res.json();
       setTasks(ts => [created, ...ts]);
     }
-    setNewTitle(''); setNewPriority('medium'); setShowAdd(false);
+    setNewTitle('');
+    setNewPriority('medium');
+    setNewHasDueDate(false);
+    setNewDueDate('');
+    setShowAdd(false);
   };
+
+  const tabConfig: { key: 'today' | 'upcoming' | 'someday'; icon: string; label: string; count: number }[] = [
+    { key: 'today', icon: '📋', label: '今日のタスク', count: today.length },
+    { key: 'upcoming', icon: '⏰', label: '締切が近い', count: upcoming.length },
+    { key: 'someday', icon: '📦', label: 'いつか', count: someday.length },
+  ];
 
   return (
     <div className="min-h-screen bg-stone-900">
@@ -244,24 +278,46 @@ export default function Board() {
       {/* Add task form */}
       {showAdd && (
         <div className="bg-stone-800 border-b border-stone-700 px-6 py-4">
-          <div className="max-w-2xl flex gap-3 flex-wrap">
-            <input
-              autoFocus
-              value={newTitle}
-              onChange={e => setNewTitle(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && e.shiftKey) addTask();
-              }}
-              placeholder="タスクタイトル… (Shift+Enterで登録)"
-              className="flex-1 min-w-0 text-sm border border-stone-600 rounded px-3 py-1.5 outline-none focus:border-stone-400 bg-stone-700 text-stone-100 placeholder-stone-500"
-            />
-            <select value={newPriority} onChange={e => setNewPriority(e.target.value as TaskPriority)} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200">
-              <option value="high">🔴 高</option>
-              <option value="medium">🟡 中</option>
-              <option value="low">🟢 低</option>
-            </select>
-            <button onClick={addTask} className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white">追加</button>
-            <button onClick={() => setShowAdd(false)} className="text-xs px-3 py-1.5 text-stone-400 hover:text-stone-200">キャンセル</button>
+          <div className="max-w-2xl flex flex-col gap-3">
+            <div className="flex gap-3 flex-wrap">
+              <input
+                autoFocus
+                value={newTitle}
+                onChange={e => setNewTitle(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && e.shiftKey) addTask();
+                }}
+                placeholder="タスクタイトル… (Shift+Enterで登録)"
+                className="flex-1 min-w-0 text-sm border border-stone-600 rounded px-3 py-1.5 outline-none focus:border-stone-400 bg-stone-700 text-stone-100 placeholder-stone-500"
+              />
+              <select value={newPriority} onChange={e => setNewPriority(e.target.value as TaskPriority)} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200">
+                <option value="high">🔴 高</option>
+                <option value="medium">🟡 中</option>
+                <option value="low">🟢 低</option>
+              </select>
+              <button onClick={addTask} className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white">追加</button>
+              <button onClick={() => { setShowAdd(false); setNewHasDueDate(false); setNewDueDate(''); }} className="text-xs px-3 py-1.5 text-stone-400 hover:text-stone-200">キャンセル</button>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setNewHasDueDate(v => !v)}
+                className={`text-xs px-3 py-1.5 rounded border transition-colors ${newHasDueDate ? 'border-blue-500 text-blue-400 bg-blue-900/20' : 'border-stone-600 text-stone-500 hover:border-stone-400 hover:text-stone-300'}`}
+              >
+                {newHasDueDate ? '⏰ 締切あり' : '締切 なし → いつか'}
+              </button>
+              {newHasDueDate && (
+                <input
+                  type="date"
+                  value={newDueDate}
+                  onChange={e => setNewDueDate(e.target.value)}
+                  className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200 outline-none focus:border-blue-500"
+                />
+              )}
+              {!newHasDueDate && (
+                <span className="text-xs text-stone-600">→ 📦 いつかに登録されます</span>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -269,7 +325,13 @@ export default function Board() {
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-44 flex-shrink-0 border-r border-stone-700 bg-stone-800 min-h-screen pt-4 hidden md:block">
-          {([['today', '今日のタスク', today.length], ['waiting', '返信待ち', waiting.length], ['in_progress', '進行中', inProgress.length], ['upcoming', '締切が近い', upcoming.length], ['someday', 'いつか', someday.length]] as [string, string, number][]).map(([k, label, count]) => (
+          {([
+            ['today', '今日のタスク', today.length],
+            ['waiting', '返信待ち', waiting.length],
+            ['in_progress', '進行中', inProgress.length],
+            ['upcoming', '締切が近い', upcoming.length],
+            ['someday', 'いつか', someday.length],
+          ] as [string, string, number][]).map(([k, label, count]) => (
             <div key={k} className="flex items-center justify-between px-4 py-2.5 text-sm text-stone-400 hover:bg-stone-700 cursor-pointer">
               <span>{label}</span>
               {count > 0 && <span className="text-xs bg-stone-700 text-stone-400 px-1.5 py-0.5 rounded-full">{count}</span>}
@@ -304,37 +366,40 @@ export default function Board() {
                 </section>
               )}
 
-              {/* タブ: 今日のタスク / 締切が近い */}
+              {/* 3タブ: 今日のタスク / 締切が近い / いつか */}
               <div className="flex gap-0 mb-6 border-b border-stone-700">
-                <button
-                  onClick={() => setActiveTab('today')}
-                  className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${activeTab === 'today' ? 'text-stone-100 border-stone-300' : 'text-stone-500 border-transparent hover:text-stone-300'}`}
-                >
-                  📋 今日のタスク
-                </button>
-                <button
-                  onClick={() => setActiveTab('upcoming')}
-                  className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${activeTab === 'upcoming' ? 'text-stone-100 border-stone-300' : 'text-stone-500 border-transparent hover:text-stone-300'}`}
-                >
-                  🗓 締切が近い
-                  {upcoming.length > 0 && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${activeTab === 'upcoming' ? 'bg-stone-600 text-stone-200' : 'bg-red-900/70 text-red-300'}`}>
-                      {upcoming.length}
-                    </span>
-                  )}
-                </button>
+                {tabConfig.map(({ key, icon, label, count }) => (
+                  <button
+                    key={key}
+                    onClick={() => setActiveTab(key)}
+                    className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${activeTab === key ? 'text-stone-100 border-stone-300' : 'text-stone-500 border-transparent hover:text-stone-300'}`}
+                  >
+                    {icon} {label}
+                    {count > 0 && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${activeTab === key ? 'bg-stone-600 text-stone-200' : key === 'upcoming' ? 'bg-red-900/70 text-red-300' : 'bg-stone-700 text-stone-400'}`}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                ))}
               </div>
 
               {/* タブコンテンツ */}
               <section className="mb-8">
-                {activeTab === 'today' ? (
+                {activeTab === 'today' && (
                   today.length === 0
                     ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
                     : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
-                ) : (
+                )}
+                {activeTab === 'upcoming' && (
                   upcoming.length === 0
                     ? <p className="text-sm text-stone-600 py-4 text-center">締切のタスクなし</p>
-                    : upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
+                    : upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} onMarkToday={markToday} />)
+                )}
+                {activeTab === 'someday' && (
+                  someday.length === 0
+                    ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
+                    : someday.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} onMarkToday={markToday} />)
                 )}
               </section>
 
@@ -358,21 +423,6 @@ export default function Board() {
                     <span className="ml-2 text-stone-600 font-normal normal-case">({inProgress.length})</span>
                   </h2>
                   {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)}
-                </section>
-              )}
-
-              {/* いつか（折りたたみ） */}
-              {someday.length > 0 && (
-                <section className="mb-8">
-                  <button
-                    onClick={() => setShowSomeday(v => !v)}
-                    className="flex items-center gap-2 text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3 w-full text-left"
-                  >
-                    🗂 いつか
-                    <span className="text-stone-600 font-normal normal-case">（{someday.length}件）</span>
-                    <span className="ml-auto">{showSomeday ? '▼' : '◀︎'}</span>
-                  </button>
-                  {showSomeday && someday.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)}
                 </section>
               )}
 
