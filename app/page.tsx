@@ -94,7 +94,7 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete }: {
             : task.due_date
               ? <span className={task.due_date <= todayStr ? 'text-red-400' : 'text-stone-400'}>締切 {task.due_date === todayStr ? '今日' : task.due_date}</span>
               : ''}
-          {hasStarted && <span className="ml-2 text-green-600 text-xs">▶ 開始済み</span>}
+          {hasStarted && <span className="ml-2 text-green-600 text-xs">▶ 対応中</span>}
           {task.permalink && <a href={task.permalink} target="_blank" rel="noopener noreferrer" className="ml-2 text-stone-600 hover:text-stone-400 transition-colors">↗</a>}
         </p>
       </div>
