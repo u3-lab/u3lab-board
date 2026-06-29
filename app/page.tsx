@@ -146,7 +146,7 @@ export default function Board() {
     load();
   }, []);
 
-  const today = tasks.filter(t => t.status === 'today');
+  const today = tasks.filter(t => t.status === 'today' && !t.due_date);
   const waiting = tasks.filter(t => t.status === 'waiting');
   const inProgress = tasks.filter(t => t.status === 'in_progress');
   const todayStr = new Date().toISOString().slice(0, 10);
