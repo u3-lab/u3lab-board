@@ -62,11 +62,14 @@ function TaskRow({ task, onDone }: { task: Task; onDone: (id: string) => void })
 export default function Board() {
   const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
   const [showAdd, setShowAdd] = useState(false);
+  const [showDone, setShowDone] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newPriority, setNewPriority] = useState<TaskPriority>('medium');
   const [newCategory, setNewCategory] = useState<TaskCategory | ''>('');
 
+  const todayStr = new Date().toISOString().slice(0, 10);
   const today = tasks.filter(t => t.status === 'today' && !t.archived_at);
+  const todayDone = tasks.filter(t => t.status === 'done' && t.completed_at && t.completed_at.startsWith(todayStr));
   const waiting = tasks.filter(t => t.status === 'waiting' && !t.archived_at);
   const inProgress = tasks.filter(t => t.status === 'in_progress' && !t.archived_at);
   const upcoming = tasks.filter(t => t.due_date && !t.archived_at && t.status !== 'done' && t.due_date > new Date().toISOString().slice(0, 10)).sort((a, b) => (a.due_date ?? '') < (b.due_date ?? '') ? -1 : 1).slice(0, 3);
@@ -190,6 +193,26 @@ export default function Board() {
             <section className="mb-8">
               <h2 className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">🗓 締切が近い</h2>
               {upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)}
+            </section>
+          )}
+
+          {/* 今日の完了 */}
+          {todayDone.length > 0 && (
+            <section className="mb-8">
+              <button
+                onClick={() => setShowDone(v => !v)}
+                className="flex items-center gap-2 text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3 w-full text-left"
+              >
+                ✅ 今日の完了
+                <span className="text-stone-300 font-normal normal-case">（{todayDone.length}件）</span>
+                <span className="ml-auto">{showDone ? '▲' : '▼'}</span>
+              </button>
+              {showDone && todayDone.map(t => (
+                <div key={t.id} className="flex items-center gap-3 py-2 border-b border-stone-100 opacity-50">
+                  <span className="text-base flex-shrink-0">✅</span>
+                  <p className="text-sm text-stone-500 line-through truncate">{t.title}</p>
+                </div>
+              ))}
             </section>
           )}
 
