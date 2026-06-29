@@ -10,6 +10,13 @@ const STATUS_LABEL: Record<TaskStatus, string> = {
   today: '今日', in_progress: '進行中', waiting: '返信待ち', done: '完了', someday: 'いつか',
 };
 
+type MockSchedule = { id: string; title: string; start: string; end?: string; category?: string };
+
+const MOCK_SCHEDULES: MockSchedule[] = [
+  { id: 's1', title: '朝ミーティング（チーム）', start: '09:00', end: '09:30', category: 'u3lab' },
+  { id: 's2', title: '写真塾オンライン相談', start: '14:00', end: '15:00', category: 'photo' },
+];
+
 const MOCK_TASKS: Task[] = [
   { id: '1', title: '写真レビュー返信（○○さん）', status: 'today', priority: 'high', due_date: new Date().toISOString().slice(0, 10), assignee: 'yuuki', source: 'manual', category: 'photo', created_at: new Date().toISOString() },
   { id: '2', title: 'LINEシナリオ確認', status: 'today', priority: 'medium', assignee: 'yuuki', source: 'manual', category: 'sns', created_at: new Date().toISOString() },
@@ -32,14 +39,27 @@ function formatDate(iso: string) {
 function todayLabel() {
   const d = new Date();
   const days = ['日', '月', '火', '水', '木', '金', '土'];
-  return `${d.getMonth() + 1}/${d.getDate()}(${days[d.getDay()]})`;
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日(${days[d.getDay()]})`;
+}
+
+function CheckCircle({ onDone }: { onDone: () => void }) {
+  return (
+    <button
+      onClick={onDone}
+      className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-stone-600 hover:border-green-500 hover:bg-green-900/40 flex items-center justify-center transition-all group/check"
+      title="完了にする"
+    >
+      <span className="text-transparent group-hover/check:text-green-500 text-xs leading-none transition-colors select-none">✓</span>
+    </button>
+  );
 }
 
 function TaskRow({ task, onDone }: { task: Task; onDone: (id: string) => void }) {
   const isWaiting = task.status === 'waiting';
   const sourceIcon = task.source === 'webhook_line' ? 'LINE' : task.source === 'webhook_slack' ? 'Slack' : '';
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-stone-700 group">
+    <div className="flex items-center gap-3 py-3 border-b border-stone-700">
+      <CheckCircle onDone={() => onDone(task.id)} />
       <span className="text-base flex-shrink-0">{PRIORITY_ICON[task.priority]}</span>
       <div className="flex-1 min-w-0">
         <p className="text-sm text-stone-200 truncate">{task.title}</p>
@@ -50,12 +70,6 @@ function TaskRow({ task, onDone }: { task: Task; onDone: (id: string) => void })
           {isWaiting ? formatDate(task.created_at) : task.due_date === new Date().toISOString().slice(0, 10) ? '締切 今日' : ''}
         </p>
       </div>
-      <button
-        onClick={() => onDone(task.id)}
-        className="opacity-0 group-hover:opacity-100 text-xs px-2 py-1 rounded bg-stone-700 hover:bg-green-900 text-stone-400 hover:text-green-400 transition-all flex-shrink-0"
-      >
-        完了
-      </button>
     </div>
   );
 }
@@ -154,6 +168,21 @@ export default function Board() {
 
         {/* Main */}
         <main className="flex-1 p-6 max-w-3xl">
+          {/* 今日のスケジュール */}
+          <section className="mb-8">
+            <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
+              📅 今日のスケジュール
+              <span className="ml-2 text-stone-600 font-normal normal-case text-xs">（Googleカレンダー連携 Phase1後半）</span>
+            </h2>
+            {MOCK_SCHEDULES.map(s => (
+              <div key={s.id} className="flex items-center gap-3 py-2 border-b border-stone-700">
+                <span className="text-xs text-stone-500 w-20 flex-shrink-0 tabular-nums">{s.start}{s.end ? `〜${s.end}` : ''}</span>
+                <p className="text-sm text-stone-300 truncate">{s.title}</p>
+                {s.category && <span className="text-xs text-stone-600 flex-shrink-0">{CATEGORY_LABEL[s.category] ?? s.category}</span>}
+              </div>
+            ))}
+          </section>
+
           {/* 今日のタスク */}
           <section className="mb-8">
             <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
@@ -210,7 +239,9 @@ export default function Board() {
               </button>
               {showDone && todayDone.map(t => (
                 <div key={t.id} className="flex items-center gap-3 py-2 border-b border-stone-700 opacity-40">
-                  <span className="text-base flex-shrink-0">✅</span>
+                  <span className="w-5 h-5 rounded-full border-2 border-green-700 flex items-center justify-center flex-shrink-0">
+                    <span className="text-green-500 text-xs leading-none">✓</span>
+                  </span>
                   <p className="text-sm text-stone-400 line-through truncate">{t.title}</p>
                 </div>
               ))}
