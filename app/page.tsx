@@ -102,10 +102,10 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday }: {
       {onMarkToday && (
         <button
           onClick={() => onMarkToday(task.id)}
-          className="flex-shrink-0 text-xs px-2 py-1 rounded border border-stone-600 text-stone-500 hover:border-blue-500 hover:text-blue-400 transition-colors opacity-0 group-hover/row:opacity-100"
+          className="flex-shrink-0 w-4 h-4 rounded-full border border-stone-600 text-stone-500 hover:border-blue-500 hover:bg-blue-900/30 transition-colors opacity-0 group-hover/row:opacity-100 flex items-center justify-center"
           title="今日やる"
         >
-          今日
+          <span className="w-1.5 h-1.5 rounded-full bg-current" />
         </button>
       )}
       <button
@@ -117,10 +117,10 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday }: {
       </button>
       <button
         onClick={() => { if (window.confirm('このタスクを削除しますか？')) onDelete(task.id); }}
-        className="flex-shrink-0 text-xs px-1.5 py-1 text-stone-700 hover:text-red-400 transition-colors opacity-0 group-hover/row:opacity-100"
+        className="flex-shrink-0 text-xs px-1.5 py-1 text-stone-700 hover:text-red-400 transition-colors opacity-0 group-hover/row:opacity-100 leading-none"
         title="削除"
       >
-        🗑
+        ×
       </button>
       {!hasStarted && task.assignee === 'yuuki' && !onMarkToday && (
         <button
