@@ -30,18 +30,24 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { title, source, memo, assignee } = body as {
+  const { title, source, memo, assignee, category: categoryOverride, priority: priorityOverride, permalink, source_ref } = body as {
     title: string;
     source: TaskSource;
     memo?: string;
     assignee?: string;
+    category?: TaskCategory;
+    priority?: TaskPriority;
+    permalink?: string;
+    source_ref?: string;
   };
 
   if (!title || !source) {
     return NextResponse.json({ error: 'title and source are required' }, { status: 400 });
   }
 
-  const { category, priority } = triage(`${title} ${memo ?? ''}`);
+  const triaged = triage(`${title} ${memo ?? ''}`);
+  const category = categoryOverride ?? triaged.category;
+  const priority = priorityOverride ?? triaged.priority;
 
   const db = supabaseAdmin();
   const { data, error } = await db.from('tasks').insert([{
@@ -51,6 +57,8 @@ export async function POST(req: NextRequest) {
     source,
     category,
     memo: memo ?? null,
+    permalink: permalink ?? null,
+    source_ref: source_ref ?? null,
     assignee: assignee ?? 'yuuki',
   }]).select().single();
 

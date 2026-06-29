@@ -13,7 +13,10 @@ export interface Task {
   source: TaskSource;
   category?: TaskCategory | null;
   memo?: string | null;
+  permalink?: string | null;
+  source_ref?: string | null;
   created_at: string;
+  started_at?: string | null;
   completed_at?: string | null;
   archived_at?: string | null;
   agent_id?: string | null;
