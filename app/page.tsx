@@ -38,11 +38,12 @@ function CheckCircle({ onDone }: { onDone: () => void }) {
   );
 }
 
-function TaskRow({ task, onDone, onStart, onEdit }: {
+function TaskRow({ task, onDone, onStart, onEdit, onDelete }: {
   task: Task;
   onDone: (id: string) => void;
   onStart: (id: string) => void;
   onEdit: (id: string, title: string) => void;
+  onDelete: (id: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
@@ -98,6 +99,13 @@ function TaskRow({ task, onDone, onStart, onEdit }: {
         title="編集"
       >
         ✎
+      </button>
+      <button
+        onClick={() => { if (window.confirm('このタスクを削除しますか？')) onDelete(task.id); }}
+        className="flex-shrink-0 text-xs px-1.5 py-1 text-stone-700 hover:text-red-400 transition-colors opacity-0 group-hover/row:opacity-100"
+        title="削除"
+      >
+        🗑
       </button>
       {!hasStarted && task.assignee === 'yuuki' && (
         <button
@@ -166,6 +174,14 @@ export default function Board() {
     if (res.ok) {
       const updated: Task = await res.json();
       setTasks(ts => ts.map(t => t.id === id ? updated : t));
+    }
+  }, []);
+
+  const deleteTask = useCallback(async (id: string) => {
+    const res = await fetch(`/api/tasks?id=${id}`, { method: 'DELETE' });
+    if (res.ok) {
+      setTasks(ts => ts.filter(t => t.id !== id));
+      setDoneTasks(ds => ds.filter(t => t.id !== id));
     }
   }, []);
 
@@ -294,7 +310,7 @@ export default function Board() {
                 </h2>
                 {today.length === 0
                   ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
-                  : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} />)
+                  : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
                 }
               </section>
 
@@ -306,7 +322,7 @@ export default function Board() {
                 </h2>
                 {waiting.length === 0
                   ? <p className="text-sm text-stone-600 py-4 text-center">なし</p>
-                  : waiting.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} />)
+                  : waiting.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
                 }
               </section>
 
@@ -317,7 +333,7 @@ export default function Board() {
                     ⚙️ 進行中
                     <span className="ml-2 text-stone-600 font-normal normal-case">({inProgress.length})</span>
                   </h2>
-                  {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} />)}
+                  {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)}
                 </section>
               )}
 
@@ -325,7 +341,7 @@ export default function Board() {
               {upcoming.length > 0 && (
                 <section className="mb-8">
                   <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">🗓 締切が近い</h2>
-                  {upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} />)}
+                  {upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)}
                 </section>
               )}
 
