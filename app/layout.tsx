@@ -4,6 +4,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'U3LAB Board',
   description: 'U3LAB タスク&スケジュール管理',
+  icons: { icon: '/favicon.ico' },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

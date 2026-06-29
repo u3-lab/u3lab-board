@@ -88,7 +88,7 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday }: {
         <p className="text-sm text-stone-200 truncate">{task.title}</p>
         <p className="text-xs text-stone-500 mt-0.5">
           {isWaiting && sourceIcon && <span className="mr-1 font-medium text-stone-400">{sourceIcon}:</span>}
-          {task.category && <span className="mr-2">{CATEGORY_LABEL[task.category] ?? task.category}</span>}
+          {task.category && task.category !== 'other' && <span className="mr-2">{CATEGORY_LABEL[task.category] ?? task.category}</span>}
           {task.assignee !== 'yuuki' && <span className="mr-2 text-blue-400">→ {task.assignee}</span>}
           {isWaiting
             ? formatDate(task.created_at)
