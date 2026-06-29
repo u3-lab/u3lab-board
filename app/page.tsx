@@ -38,11 +38,47 @@ function CheckCircle({ onDone }: { onDone: () => void }) {
   );
 }
 
-function TaskRow({ task, onDone }: { task: Task; onDone: (id: string) => void }) {
+function TaskRow({ task, onDone, onStart, onEdit }: {
+  task: Task;
+  onDone: (id: string) => void;
+  onStart: (id: string) => void;
+  onEdit: (id: string, title: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(task.title);
   const isWaiting = task.status === 'waiting';
   const sourceIcon = task.source === 'webhook_line' ? 'LINE' : task.source === 'webhook_slack' ? 'Slack' : '';
+  const hasStarted = !!task.started_at;
+
+  const saveEdit = () => {
+    if (editTitle.trim() && editTitle.trim() !== task.title) {
+      onEdit(task.id, editTitle.trim());
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2 py-3 border-b border-stone-700">
+        <CheckCircle onDone={() => onDone(task.id)} />
+        <input
+          autoFocus
+          value={editTitle}
+          onChange={e => setEditTitle(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') saveEdit();
+            if (e.key === 'Escape') { setEditing(false); setEditTitle(task.title); }
+          }}
+          className="flex-1 min-w-0 text-sm border border-stone-500 rounded px-2 py-1 bg-stone-700 text-stone-100 outline-none focus:border-stone-400"
+        />
+        <button onClick={saveEdit} className="flex-shrink-0 text-xs px-2 py-1 bg-stone-100 text-stone-900 rounded hover:bg-white">保存</button>
+        <button onClick={() => { setEditing(false); setEditTitle(task.title); }} className="flex-shrink-0 text-xs text-stone-400 hover:text-stone-200">キャンセル</button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-stone-700">
+    <div className="flex items-center gap-3 py-3 border-b border-stone-700 group/row">
       <CheckCircle onDone={() => onDone(task.id)} />
       <span className="text-base flex-shrink-0">{PRIORITY_ICON[task.priority]}</span>
       <div className="flex-1 min-w-0">
@@ -52,8 +88,26 @@ function TaskRow({ task, onDone }: { task: Task; onDone: (id: string) => void })
           {task.category && <span className="mr-2">{CATEGORY_LABEL[task.category] ?? task.category}</span>}
           {task.assignee !== 'yuuki' && <span className="mr-2 text-blue-400">→ {task.assignee}</span>}
           {isWaiting ? formatDate(task.created_at) : task.due_date === new Date().toISOString().slice(0, 10) ? '締切 今日' : ''}
+          {hasStarted && <span className="ml-2 text-green-600 text-xs">▶ 開始済み</span>}
+          {task.permalink && <a href={task.permalink} target="_blank" rel="noopener noreferrer" className="ml-2 text-stone-600 hover:text-stone-400 transition-colors">↗</a>}
         </p>
       </div>
+      <button
+        onClick={() => setEditing(true)}
+        className="flex-shrink-0 text-xs px-1.5 py-1 text-stone-700 hover:text-stone-400 transition-colors opacity-0 group-hover/row:opacity-100"
+        title="編集"
+      >
+        ✎
+      </button>
+      {!hasStarted && task.assignee === 'yuuki' && (
+        <button
+          onClick={() => onStart(task.id)}
+          className="flex-shrink-0 text-xs px-2 py-1 rounded border border-stone-600 text-stone-500 hover:border-green-600 hover:text-green-500 transition-colors"
+          title="開始時刻を記録"
+        >
+          ▶
+        </button>
+      )}
     </div>
   );
 }
@@ -99,7 +153,31 @@ export default function Board() {
     if (res.ok) {
       const updated: Task = await res.json();
       setTasks(ts => ts.filter(t => t.id !== id));
-      setDoneTasks(ds => [updated, ...ds]);
+      setDoneTasks(ds => ds.some(t => t.id === updated.id) ? ds : [updated, ...ds]);
+    }
+  }, []);
+
+  const markStarted = useCallback(async (id: string) => {
+    const res = await fetch(`/api/tasks?id=${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ started_at: new Date().toISOString() }),
+    });
+    if (res.ok) {
+      const updated: Task = await res.json();
+      setTasks(ts => ts.map(t => t.id === id ? updated : t));
+    }
+  }, []);
+
+  const editTask = useCallback(async (id: string, title: string) => {
+    const res = await fetch(`/api/tasks?id=${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    if (res.ok) {
+      const updated: Task = await res.json();
+      setTasks(ts => ts.map(t => t.id === id ? updated : t));
     }
   }, []);
 
@@ -149,8 +227,10 @@ export default function Board() {
               autoFocus
               value={newTitle}
               onChange={e => setNewTitle(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addTask()}
-              placeholder="タスクタイトル..."
+              onKeyDown={e => {
+                if (e.key === 'Enter' && e.shiftKey) addTask();
+              }}
+              placeholder="タスクタイトル… (Shift+Enterで登録)"
               className="flex-1 min-w-0 text-sm border border-stone-600 rounded px-3 py-1.5 outline-none focus:border-stone-400 bg-stone-700 text-stone-100 placeholder-stone-500"
             />
             <select value={newPriority} onChange={e => setNewPriority(e.target.value as TaskPriority)} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200">
@@ -214,7 +294,7 @@ export default function Board() {
                 </h2>
                 {today.length === 0
                   ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
-                  : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)
+                  : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} />)
                 }
               </section>
 
@@ -226,7 +306,7 @@ export default function Board() {
                 </h2>
                 {waiting.length === 0
                   ? <p className="text-sm text-stone-600 py-4 text-center">なし</p>
-                  : waiting.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)
+                  : waiting.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} />)
                 }
               </section>
 
@@ -237,7 +317,7 @@ export default function Board() {
                     ⚙️ 進行中
                     <span className="ml-2 text-stone-600 font-normal normal-case">({inProgress.length})</span>
                   </h2>
-                  {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)}
+                  {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} />)}
                 </section>
               )}
 
@@ -245,7 +325,7 @@ export default function Board() {
               {upcoming.length > 0 && (
                 <section className="mb-8">
                   <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">🗓 締切が近い</h2>
-                  {upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)}
+                  {upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} />)}
                 </section>
               )}
 
@@ -258,7 +338,7 @@ export default function Board() {
                   >
                     ✅ 今日の完了
                     <span className="text-stone-600 font-normal normal-case">（{doneTasks.length}件）</span>
-                    <span className="ml-auto">{showDone ? '▲' : '▼'}</span>
+                    <span className="ml-auto">{showDone ? '▼' : '▲'}</span>
                   </button>
                   {showDone && doneTasks.map(t => (
                     <div key={t.id} className="flex items-center gap-3 py-2 border-b border-stone-700 opacity-40">
