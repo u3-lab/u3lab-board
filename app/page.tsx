@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import type { Task, TaskStatus, TaskPriority, TaskCategory } from '@/lib/types';
 
 const PRIORITY_ICON: Record<TaskPriority, string> = { high: '🔴', medium: '🟡', low: '🟢' };
@@ -38,20 +38,20 @@ function TaskRow({ task, onDone }: { task: Task; onDone: (id: string) => void })
   const isWaiting = task.status === 'waiting';
   const sourceIcon = task.source === 'webhook_line' ? 'LINE' : task.source === 'webhook_slack' ? 'Slack' : '';
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-stone-100 group">
+    <div className="flex items-center gap-3 py-3 border-b border-stone-700 group">
       <span className="text-base flex-shrink-0">{PRIORITY_ICON[task.priority]}</span>
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-stone-700 truncate">{task.title}</p>
-        <p className="text-xs text-stone-400 mt-0.5">
-          {isWaiting && sourceIcon && <span className="mr-1 font-medium text-stone-500">{sourceIcon}:</span>}
+        <p className="text-sm text-stone-200 truncate">{task.title}</p>
+        <p className="text-xs text-stone-500 mt-0.5">
+          {isWaiting && sourceIcon && <span className="mr-1 font-medium text-stone-400">{sourceIcon}:</span>}
           {task.category && <span className="mr-2">{CATEGORY_LABEL[task.category] ?? task.category}</span>}
-          {task.assignee !== 'yuuki' && <span className="mr-2 text-blue-500">→ {task.assignee}</span>}
+          {task.assignee !== 'yuuki' && <span className="mr-2 text-blue-400">→ {task.assignee}</span>}
           {isWaiting ? formatDate(task.created_at) : task.due_date === new Date().toISOString().slice(0, 10) ? '締切 今日' : ''}
         </p>
       </div>
       <button
         onClick={() => onDone(task.id)}
-        className="opacity-0 group-hover:opacity-100 text-xs px-2 py-1 rounded bg-stone-100 hover:bg-green-100 text-stone-500 hover:text-green-700 transition-all flex-shrink-0"
+        className="opacity-0 group-hover:opacity-100 text-xs px-2 py-1 rounded bg-stone-700 hover:bg-green-900 text-stone-400 hover:text-green-400 transition-all flex-shrink-0"
       >
         完了
       </button>
@@ -95,16 +95,16 @@ export default function Board() {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-900">
       {/* Header */}
-      <header className="bg-white border-b border-stone-200 px-6 py-3 flex items-center gap-4 sticky top-0 z-10">
-        <h1 className="text-base font-semibold text-stone-800">U3LAB Board</h1>
-        <span className="text-xs text-stone-400">{todayLabel()}</span>
+      <header className="bg-stone-800 border-b border-stone-700 px-6 py-3 flex items-center gap-4 sticky top-0 z-10">
+        <h1 className="text-base font-semibold text-stone-100">U3LAB Board</h1>
+        <span className="text-xs text-stone-500">{todayLabel()}</span>
         <div className="flex-1" />
-        <span className="text-xs text-stone-500 bg-stone-100 px-2 py-1 rounded-full">○ 祐紀</span>
+        <span className="text-xs text-stone-400 bg-stone-700 px-2 py-1 rounded-full">○ 祐紀</span>
         <button
           onClick={() => setShowAdd(v => !v)}
-          className="text-xs px-3 py-1.5 bg-stone-800 text-white rounded-md hover:bg-stone-700 transition-colors"
+          className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded-md hover:bg-white transition-colors"
         >
           + タスク追加
         </button>
@@ -112,7 +112,7 @@ export default function Board() {
 
       {/* Add task form */}
       {showAdd && (
-        <div className="bg-white border-b border-stone-200 px-6 py-4">
+        <div className="bg-stone-800 border-b border-stone-700 px-6 py-4">
           <div className="max-w-2xl flex gap-3 flex-wrap">
             <input
               autoFocus
@@ -120,34 +120,34 @@ export default function Board() {
               onChange={e => setNewTitle(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && addTask()}
               placeholder="タスクタイトル..."
-              className="flex-1 min-w-0 text-sm border border-stone-200 rounded px-3 py-1.5 outline-none focus:border-stone-400"
+              className="flex-1 min-w-0 text-sm border border-stone-600 rounded px-3 py-1.5 outline-none focus:border-stone-400 bg-stone-700 text-stone-100 placeholder-stone-500"
             />
-            <select value={newPriority} onChange={e => setNewPriority(e.target.value as TaskPriority)} className="text-xs border border-stone-200 rounded px-2 py-1.5 bg-white">
+            <select value={newPriority} onChange={e => setNewPriority(e.target.value as TaskPriority)} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200">
               <option value="high">🔴 高</option>
               <option value="medium">🟡 中</option>
               <option value="low">🟢 低</option>
             </select>
-            <select value={newCategory} onChange={e => setNewCategory(e.target.value as TaskCategory | '')} className="text-xs border border-stone-200 rounded px-2 py-1.5 bg-white">
+            <select value={newCategory} onChange={e => setNewCategory(e.target.value as TaskCategory | '')} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200">
               <option value="">カテゴリ</option>
               {Object.entries(CATEGORY_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
-            <button onClick={addTask} className="text-xs px-3 py-1.5 bg-stone-800 text-white rounded hover:bg-stone-700">追加</button>
-            <button onClick={() => setShowAdd(false)} className="text-xs px-3 py-1.5 text-stone-500 hover:text-stone-700">キャンセル</button>
+            <button onClick={addTask} className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white">追加</button>
+            <button onClick={() => setShowAdd(false)} className="text-xs px-3 py-1.5 text-stone-400 hover:text-stone-200">キャンセル</button>
           </div>
         </div>
       )}
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-44 flex-shrink-0 border-r border-stone-200 bg-white min-h-screen pt-4 hidden md:block">
+        <aside className="w-44 flex-shrink-0 border-r border-stone-700 bg-stone-800 min-h-screen pt-4 hidden md:block">
           {([['today', '今日のタスク', today.length], ['waiting', '返信待ち', waiting.length], ['in_progress', '進行中', inProgress.length], ['upcoming', '締切が近い', upcoming.length], ['someday', 'いつか', 0]] as [string, string, number][]).map(([k, label, count]) => (
-            <div key={k} className="flex items-center justify-between px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-50 cursor-pointer">
+            <div key={k} className="flex items-center justify-between px-4 py-2.5 text-sm text-stone-400 hover:bg-stone-700 cursor-pointer">
               <span>{label}</span>
-              {count > 0 && <span className="text-xs bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded-full">{count}</span>}
+              {count > 0 && <span className="text-xs bg-stone-700 text-stone-400 px-1.5 py-0.5 rounded-full">{count}</span>}
             </div>
           ))}
-          <div className="border-t border-stone-100 mt-2 pt-2">
-            <div className="px-4 py-2.5 text-sm text-stone-600 hover:bg-stone-50 cursor-pointer">📅 カレンダー</div>
+          <div className="border-t border-stone-700 mt-2 pt-2">
+            <div className="px-4 py-2.5 text-sm text-stone-400 hover:bg-stone-700 cursor-pointer">📅 カレンダー</div>
           </div>
         </aside>
 
@@ -155,24 +155,24 @@ export default function Board() {
         <main className="flex-1 p-6 max-w-3xl">
           {/* 今日のタスク */}
           <section className="mb-8">
-            <h2 className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
+            <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
               📋 今日のタスク
-              <span className="ml-2 text-stone-300 font-normal normal-case">({today.length})</span>
+              <span className="ml-2 text-stone-600 font-normal normal-case">({today.length})</span>
             </h2>
             {today.length === 0
-              ? <p className="text-sm text-stone-300 py-4 text-center">タスクなし</p>
+              ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
               : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)
             }
           </section>
 
           {/* 返信待ち */}
           <section className="mb-8">
-            <h2 className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
+            <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
               📨 返信待ち
-              <span className="ml-2 text-stone-300 font-normal normal-case">({waiting.length})</span>
+              <span className="ml-2 text-stone-600 font-normal normal-case">({waiting.length})</span>
             </h2>
             {waiting.length === 0
-              ? <p className="text-sm text-stone-300 py-4 text-center">なし</p>
+              ? <p className="text-sm text-stone-600 py-4 text-center">なし</p>
               : waiting.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)
             }
           </section>
@@ -180,9 +180,9 @@ export default function Board() {
           {/* 進行中 */}
           {inProgress.length > 0 && (
             <section className="mb-8">
-              <h2 className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">
+              <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
                 ⚙️ 進行中
-                <span className="ml-2 text-stone-300 font-normal normal-case">({inProgress.length})</span>
+                <span className="ml-2 text-stone-600 font-normal normal-case">({inProgress.length})</span>
               </h2>
               {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)}
             </section>
@@ -191,7 +191,7 @@ export default function Board() {
           {/* 締切が近い */}
           {upcoming.length > 0 && (
             <section className="mb-8">
-              <h2 className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">🗓 締切が近い</h2>
+              <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">🗓 締切が近い</h2>
               {upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} />)}
             </section>
           )}
@@ -201,22 +201,22 @@ export default function Board() {
             <section className="mb-8">
               <button
                 onClick={() => setShowDone(v => !v)}
-                className="flex items-center gap-2 text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3 w-full text-left"
+                className="flex items-center gap-2 text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3 w-full text-left"
               >
                 ✅ 今日の完了
-                <span className="text-stone-300 font-normal normal-case">（{todayDone.length}件）</span>
+                <span className="text-stone-600 font-normal normal-case">（{todayDone.length}件）</span>
                 <span className="ml-auto">{showDone ? '▲' : '▼'}</span>
               </button>
               {showDone && todayDone.map(t => (
-                <div key={t.id} className="flex items-center gap-3 py-2 border-b border-stone-100 opacity-50">
+                <div key={t.id} className="flex items-center gap-3 py-2 border-b border-stone-700 opacity-40">
                   <span className="text-base flex-shrink-0">✅</span>
-                  <p className="text-sm text-stone-500 line-through truncate">{t.title}</p>
+                  <p className="text-sm text-stone-400 line-through truncate">{t.title}</p>
                 </div>
               ))}
             </section>
           )}
 
-          <p className="text-xs text-stone-300 text-center pt-4">
+          <p className="text-xs text-stone-700 text-center pt-4">
             ※ 現在はモックデータ表示中。Supabase接続後にリアルタイム同期されます。
           </p>
         </main>
