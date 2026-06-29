@@ -1,6 +1,7 @@
 'use client';
 import { useState, useCallback, useEffect } from 'react';
 import type { Task, TaskStatus, TaskPriority, TaskCategory, TaskSource } from '@/lib/types';
+import type { ScheduleEvent } from '@/app/api/schedule/route';
 
 const PRIORITY_ICON: Record<TaskPriority, string> = { high: '🔴', medium: '🟡', low: '🟢' };
 const CATEGORY_LABEL: Record<string, string> = {
@@ -9,13 +10,6 @@ const CATEGORY_LABEL: Record<string, string> = {
 const STATUS_LABEL: Record<TaskStatus, string> = {
   today: '今日', in_progress: '進行中', waiting: '返信待ち', done: '完了', someday: 'いつか',
 };
-
-type MockSchedule = { id: string; title: string; start: string; end?: string; category?: string };
-
-const MOCK_SCHEDULES: MockSchedule[] = [
-  { id: 's1', title: '朝ミーティング（チーム）', start: '09:00', end: '09:30', category: 'u3lab' },
-  { id: 's2', title: '写真塾オンライン相談', start: '14:00', end: '15:00', category: 'photo' },
-];
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -67,6 +61,7 @@ function TaskRow({ task, onDone }: { task: Task; onDone: (id: string) => void })
 export default function Board() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [doneTasks, setDoneTasks] = useState<Task[]>([]);
+  const [schedules, setSchedules] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [showDone, setShowDone] = useState(false);
@@ -76,12 +71,14 @@ export default function Board() {
 
   useEffect(() => {
     const load = async () => {
-      const [active, done] = await Promise.all([
+      const [active, done, sched] = await Promise.all([
         fetch('/api/tasks').then(r => r.json()),
         fetch('/api/tasks?completed_today=true').then(r => r.json()),
+        fetch('/api/schedule').then(r => r.json()).catch(() => []),
       ]);
       setTasks(Array.isArray(active) ? active : []);
       setDoneTasks(Array.isArray(done) ? done : []);
+      setSchedules(Array.isArray(sched) ? sched : []);
       setLoading(false);
     };
     load();
@@ -192,19 +189,22 @@ export default function Board() {
           ) : (
             <>
               {/* 今日のスケジュール */}
-              <section className="mb-8">
-                <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
-                  📅 今日のスケジュール
-                  <span className="ml-2 text-stone-600 font-normal normal-case text-xs">（GCal連携 Phase1後半）</span>
-                </h2>
-                {MOCK_SCHEDULES.map(s => (
-                  <div key={s.id} className="flex items-center gap-3 py-2 border-b border-stone-700">
-                    <span className="text-xs text-stone-500 w-20 flex-shrink-0 tabular-nums">{s.start}{s.end ? `〜${s.end}` : ''}</span>
-                    <p className="text-sm text-stone-300 truncate">{s.title}</p>
-                    {s.category && <span className="text-xs text-stone-600 flex-shrink-0">{CATEGORY_LABEL[s.category] ?? s.category}</span>}
-                  </div>
-                ))}
-              </section>
+              {schedules.length > 0 && (
+                <section className="mb-8">
+                  <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
+                    📅 今日のスケジュール
+                    <span className="ml-2 text-stone-600 font-normal normal-case">({schedules.length})</span>
+                  </h2>
+                  {schedules.map(s => (
+                    <div key={s.id} className="flex items-center gap-3 py-2 border-b border-stone-700">
+                      <span className="text-xs text-stone-500 w-20 flex-shrink-0 tabular-nums">
+                        {s.allDay ? '終日' : `${s.start}${s.end ? `〜${s.end}` : ''}`}
+                      </span>
+                      <p className="text-sm text-stone-300 truncate">{s.title}</p>
+                    </div>
+                  ))}
+                </section>
+              )}
 
               {/* 今日のタスク */}
               <section className="mb-8">
