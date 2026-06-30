@@ -125,7 +125,7 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday }: {
       {!hasStarted && task.assignee === 'yuuki' && !onMarkToday && (
         <button
           onClick={() => onStart(task.id)}
-          className="flex-shrink-0 text-xs px-2 py-1 rounded border border-stone-600 text-stone-500 hover:border-green-600 hover:text-green-500 transition-colors"
+          className="flex-shrink-0 text-xs px-1.5 py-1 text-stone-500 hover:text-green-500 transition-colors opacity-0 group-hover/row:opacity-100"
           title="開始時刻を記録"
         >
           ▶
@@ -254,9 +254,9 @@ export default function Board() {
   };
 
   const tabConfig: { key: 'today' | 'upcoming' | 'someday'; icon: string; label: string; count: number }[] = [
-    { key: 'today', icon: '📋', label: '今日のタスク', count: today.length },
-    { key: 'upcoming', icon: '⏰', label: '締切が近い', count: upcoming.length },
-    { key: 'someday', icon: '📦', label: 'いつか', count: someday.length },
+    { key: 'today', icon: '📋', label: '今日やる', count: today.length },
+    { key: 'upcoming', icon: '⏰', label: '期限あり', count: upcoming.length },
+    { key: 'someday', icon: '📦', label: 'いつかやる', count: someday.length },
   ];
 
   return (
