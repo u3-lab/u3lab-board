@@ -329,8 +329,8 @@ export default function Board() {
             ['today', '今日のタスク', today.length],
             ['waiting', '返信待ち', waiting.length],
             ['in_progress', '進行中', inProgress.length],
-            ['upcoming', '締切が近い', upcoming.length],
-            ['someday', 'いつか', someday.length],
+            ['upcoming', '期限あり', upcoming.length],
+            ['someday', 'いつかやる', someday.length],
           ] as [string, string, number][]).map(([k, label, count]) => (
             <div key={k} className="flex items-center justify-between px-4 py-2.5 text-sm text-stone-400 hover:bg-stone-700 cursor-pointer">
               <span>{label}</span>
