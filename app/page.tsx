@@ -337,7 +337,7 @@ export default function Board() {
                 <option value="low">🟢 低</option>
               </select>
               <button onClick={addTask} className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white">追加</button>
-              <button onClick={() => { setShowAdd(false); setNewHasDueDate(false); setNewDueDate(''); }} className="text-xs px-3 py-1.5 text-stone-400 hover:text-stone-200">キャンセル</button>
+              <button onClick={() => { setShowAdd(false); setNewDest('today'); setNewDueDate(''); }} className="text-xs px-3 py-1.5 text-stone-400 hover:text-stone-200">キャンセル</button>
             </div>
             <div className="flex items-center gap-3">
               <button
