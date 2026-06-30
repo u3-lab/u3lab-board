@@ -184,7 +184,7 @@ export default function Board() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newPriority, setNewPriority] = useState<TaskPriority>('medium');
-  const [newHasDueDate, setNewHasDueDate] = useState(false);
+  const [newDest, setNewDest] = useState<'today' | 'due' | 'someday'>('today');
   const [newDueDate, setNewDueDate] = useState('');
 
   useEffect(() => {
@@ -272,11 +272,11 @@ export default function Board() {
     if (!newTitle.trim()) return;
     const body: Partial<Task> = {
       title: newTitle.trim(),
-      status: newHasDueDate ? 'today' as TaskStatus : 'someday' as TaskStatus,
+      status: newDest === 'someday' ? 'someday' as TaskStatus : 'today' as TaskStatus,
       priority: newPriority,
       assignee: 'yuuki',
       source: 'manual' as TaskSource,
-      ...(newHasDueDate && newDueDate ? { due_date: newDueDate } : {}),
+      ...(newDest === 'due' && newDueDate ? { due_date: newDueDate } : {}),
     };
     const res = await fetch('/api/tasks', {
       method: 'POST',
@@ -289,7 +289,7 @@ export default function Board() {
     }
     setNewTitle('');
     setNewPriority('medium');
-    setNewHasDueDate(false);
+    setNewDest('today');
     setNewDueDate('');
     setShowAdd(false);
   };
@@ -342,21 +342,22 @@ export default function Board() {
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setNewHasDueDate(v => !v)}
-                className={`text-xs px-3 py-1.5 rounded border transition-colors ${newHasDueDate ? 'border-blue-500 text-blue-400 bg-blue-900/20' : 'border-stone-600 text-stone-500 hover:border-stone-400 hover:text-stone-300'}`}
+                onClick={() => setNewDest(d => d === 'today' ? 'due' : d === 'due' ? 'someday' : 'today')}
+                className={`text-xs px-3 py-1.5 rounded border transition-colors ${
+                  newDest === 'today' ? 'border-green-600 text-green-400 bg-green-900/20' :
+                  newDest === 'due' ? 'border-blue-500 text-blue-400 bg-blue-900/20' :
+                  'border-stone-600 text-stone-500 hover:border-stone-400 hover:text-stone-300'
+                }`}
               >
-                {newHasDueDate ? '⏰ 締切あり' : '締切 なし → いつか'}
+                {newDest === 'today' ? '📋 今日やる' : newDest === 'due' ? '⏰ 期限あり' : '📦 いつか'}
               </button>
-              {newHasDueDate && (
+              {newDest === 'due' && (
                 <input
                   type="date"
                   value={newDueDate}
                   onChange={e => setNewDueDate(e.target.value)}
                   className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200 outline-none focus:border-blue-500"
                 />
-              )}
-              {!newHasDueDate && (
-                <span className="text-xs text-stone-600">→ 📦 いつかに登録されます</span>
               )}
             </div>
           </div>
