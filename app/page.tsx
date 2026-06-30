@@ -1,6 +1,6 @@
 'use client';
 import { useState, useCallback, useEffect } from 'react';
-import type { Task, TaskStatus, TaskPriority, TaskCategory, TaskSource } from '@/lib/types';
+import type { Task, TaskStatus, TaskPriority, TaskCategory, TaskSource, Project, ProjectStatus } from '@/lib/types';
 import type { ScheduleEvent } from '@/app/api/schedule/route';
 
 const PRIORITY_ICON: Record<TaskPriority, string> = { high: '🔴', medium: '🟡', low: '🟢' };
@@ -135,14 +135,53 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday }: {
   );
 }
 
+const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
+  active: '進行中', waiting: '待機', stalled: '停滞', done: '完了',
+};
+const PROJECT_STATUS_COLOR: Record<ProjectStatus, string> = {
+  active: 'text-green-400', waiting: 'text-yellow-400', stalled: 'text-red-400', done: 'text-stone-500',
+};
+
+function ProjectCard({ project, onClick }: { project: Project; onClick: () => void }) {
+  return (
+    <div
+      onClick={onClick}
+      className="border border-stone-700 rounded-lg p-4 hover:border-stone-500 cursor-pointer transition-colors bg-stone-800/50"
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <p className="text-sm font-medium text-stone-100 leading-snug">{project.name}</p>
+        <span className={`text-xs flex-shrink-0 font-medium ${PROJECT_STATUS_COLOR[project.status]}`}>
+          {PROJECT_STATUS_LABEL[project.status]}
+        </span>
+      </div>
+      {project.next_action && (
+        <p className="text-xs text-stone-400 mb-2 line-clamp-2">→ {project.next_action}</p>
+      )}
+      <div className="flex items-center gap-3 text-xs text-stone-600">
+        {project.category && <span>{project.category}</span>}
+        {(project.task_count_today ?? 0) > 0 && (
+          <span className="text-blue-400">今日やる {project.task_count_today}</span>
+        )}
+        {project.due_date && <span className="text-stone-500">期限 {project.due_date}</span>}
+        {project.blocker_type && project.blocker_type !== 'none' && (
+          <span className="text-red-400">⚠ {project.blocker_type === 'external' ? '外部待ち' : '内部ブロック'}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function Board() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [doneTasks, setDoneTasks] = useState<Task[]>([]);
   const [schedules, setSchedules] = useState<ScheduleEvent[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [showDone, setShowDone] = useState(false);
+  const [activeNav, setActiveNav] = useState<'tasks' | 'projects'>('tasks');
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'someday'>('today');
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newPriority, setNewPriority] = useState<TaskPriority>('medium');
   const [newHasDueDate, setNewHasDueDate] = useState(false);
@@ -150,14 +189,16 @@ export default function Board() {
 
   useEffect(() => {
     const load = async () => {
-      const [active, done, sched] = await Promise.all([
+      const [active, done, sched, proj] = await Promise.all([
         fetch('/api/tasks').then(r => r.json()),
         fetch('/api/tasks?completed_today=true').then(r => r.json()),
         fetch('/api/schedule').then(r => r.json()).catch(() => []),
+        fetch('/api/projects').then(r => r.json()).catch(() => []),
       ]);
       setTasks(Array.isArray(active) ? active : []);
       setDoneTasks(Array.isArray(done) ? done : []);
       setSchedules(Array.isArray(sched) ? sched : []);
+      setProjects(Array.isArray(proj) ? proj : []);
       setLoading(false);
     };
     load();
@@ -325,27 +366,126 @@ export default function Board() {
       <div className="flex">
         {/* Sidebar */}
         <aside className="w-44 flex-shrink-0 border-r border-stone-700 bg-stone-800 min-h-screen pt-4 hidden md:block">
-          {([
-            ['today', '今日のタスク', today.length],
-            ['waiting', '返信待ち', waiting.length],
-            ['in_progress', '進行中', inProgress.length],
-            ['upcoming', '期限あり', upcoming.length],
-            ['someday', 'いつかやる', someday.length],
-          ] as [string, string, number][]).map(([k, label, count]) => (
-            <div key={k} className="flex items-center justify-between px-4 py-2.5 text-sm text-stone-400 hover:bg-stone-700 cursor-pointer">
-              <span>{label}</span>
-              {count > 0 && <span className="text-xs bg-stone-700 text-stone-400 px-1.5 py-0.5 rounded-full">{count}</span>}
-            </div>
-          ))}
-          <div className="border-t border-stone-700 mt-2 pt-2">
-            <div className="px-4 py-2.5 text-sm text-stone-400 hover:bg-stone-700 cursor-pointer">📅 カレンダー</div>
+          <div
+            onClick={() => setActiveNav('tasks')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm cursor-pointer ${activeNav === 'tasks' ? 'text-stone-100 bg-stone-700' : 'text-stone-400 hover:bg-stone-700'}`}
+          >
+            📋 タスク
           </div>
+          <div
+            onClick={() => setActiveNav('projects')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm cursor-pointer ${activeNav === 'projects' ? 'text-stone-100 bg-stone-700' : 'text-stone-400 hover:bg-stone-700'}`}
+          >
+            🗂 プロジェクト
+            {projects.filter(p => p.status === 'active').length > 0 && (
+              <span className="ml-auto text-xs bg-stone-700 text-stone-400 px-1.5 py-0.5 rounded-full">
+                {projects.filter(p => p.status === 'active').length}
+              </span>
+            )}
+          </div>
+          {activeNav === 'tasks' && (
+            <>
+              <div className="border-t border-stone-700 mt-2 pt-2">
+                {([
+                  ['today', '今日のタスク', today.length],
+                  ['waiting', '返信待ち', waiting.length],
+                  ['in_progress', '進行中', inProgress.length],
+                  ['upcoming', '期限あり', upcoming.length],
+                  ['someday', 'いつかやる', someday.length],
+                ] as [string, string, number][]).map(([k, label, count]) => (
+                  <div key={k} className="flex items-center justify-between px-4 py-2 text-xs text-stone-500 hover:bg-stone-700 cursor-pointer">
+                    <span>{label}</span>
+                    {count > 0 && <span className="bg-stone-700 text-stone-400 px-1.5 py-0.5 rounded-full">{count}</span>}
+                  </div>
+                ))}
+              </div>
+              <div className="border-t border-stone-700 mt-2 pt-2">
+                <div className="px-4 py-2.5 text-sm text-stone-400 hover:bg-stone-700 cursor-pointer">📅 カレンダー</div>
+              </div>
+            </>
+          )}
         </aside>
 
         {/* Main */}
         <main className="flex-1 p-6 max-w-3xl">
           {loading ? (
             <p className="text-sm text-stone-600 text-center py-12">読み込み中...</p>
+          ) : activeNav === 'projects' ? (
+            <>
+              {selectedProject ? (
+                <>
+                  <div className="flex items-center gap-3 mb-6">
+                    <button
+                      onClick={() => setSelectedProject(null)}
+                      className="text-xs text-stone-500 hover:text-stone-300 transition-colors"
+                    >
+                      ← 一覧に戻る
+                    </button>
+                  </div>
+                  <div className="border border-stone-700 rounded-lg p-5 mb-6">
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <h2 className="text-base font-semibold text-stone-100">{selectedProject.name}</h2>
+                      <span className={`text-xs font-medium flex-shrink-0 ${PROJECT_STATUS_COLOR[selectedProject.status]}`}>
+                        {PROJECT_STATUS_LABEL[selectedProject.status]}
+                      </span>
+                    </div>
+                    {selectedProject.category && <p className="text-xs text-stone-500 mb-2">{selectedProject.category}</p>}
+                    {selectedProject.assignees.length > 0 && (
+                      <p className="text-xs text-stone-400 mb-1">担当: {selectedProject.assignees.join(', ')}{selectedProject.assignee_role ? ` (${selectedProject.assignee_role})` : ''}</p>
+                    )}
+                    {selectedProject.next_action && (
+                      <p className="text-sm text-stone-300 mt-3 border-l-2 border-stone-600 pl-3">→ {selectedProject.next_action}</p>
+                    )}
+                    {selectedProject.blocker_type && selectedProject.blocker_type !== 'none' && (
+                      <p className="text-xs text-red-400 mt-2">⚠ ブロッカー: {selectedProject.blocker_detail ?? selectedProject.blocker_type}</p>
+                    )}
+                    {selectedProject.due_date && (
+                      <p className="text-xs text-stone-500 mt-2">期限: {selectedProject.due_date}</p>
+                    )}
+                  </div>
+                  <section>
+                    <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
+                      関連タスク（今日やる）
+                    </h3>
+                    {tasks.filter(t => t.project_id === selectedProject.id && t.status === 'today').length === 0
+                      ? <p className="text-sm text-stone-600 py-4 text-center">なし</p>
+                      : tasks.filter(t => t.project_id === selectedProject.id && t.status === 'today')
+                          .map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
+                    }
+                  </section>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-sm font-semibold text-stone-300">プロジェクト一覧</h2>
+                    <span className="text-xs text-stone-600">{projects.length} 件</span>
+                  </div>
+                  {projects.length === 0
+                    ? <p className="text-sm text-stone-600 py-8 text-center">プロジェクトなし</p>
+                    : (
+                      <div className="flex flex-col gap-3">
+                        {(['active', 'waiting', 'stalled', 'done'] as ProjectStatus[]).map(st => {
+                          const group = projects.filter(p => p.status === st);
+                          if (group.length === 0) return null;
+                          return (
+                            <div key={st}>
+                              <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${PROJECT_STATUS_COLOR[st]}`}>
+                                {PROJECT_STATUS_LABEL[st]} ({group.length})
+                              </p>
+                              <div className="flex flex-col gap-2">
+                                {group.map(p => (
+                                  <ProjectCard key={p.id} project={p} onClick={() => setSelectedProject(p)} />
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )
+                  }
+                </>
+              )}
+            </>
           ) : (
             <>
               {/* 今日のスケジュール */}
