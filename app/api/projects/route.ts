@@ -25,7 +25,8 @@ export async function GET() {
       .limit(200),
     db.from('project_log')
       .select('*')
-      .order('log_date', { ascending: false })
+      .order('log_date', { ascending: true })
+      .order('created_at', { ascending: true })
       .limit(500),
   ]);
 

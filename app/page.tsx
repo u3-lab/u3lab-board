@@ -859,7 +859,7 @@ export default function Board() {
                       <p className="text-sm text-stone-600 py-3 text-center">ログなし</p>
                     ) : (
                       <>
-                        {(showAllLogs ? selectedProject.logs! : selectedProject.logs!.slice(0, 5)).map(log => (
+                        {(showAllLogs ? selectedProject.logs! : selectedProject.logs!.slice(-5)).map(log => (
                           <div key={log.id} className={`flex gap-3 py-2 border-b border-stone-800 ${log.entry_type === 'milestone_done' ? 'bg-green-950/20' : ''}`}>
                             <span className="text-xs text-stone-600 flex-shrink-0 tabular-nums w-16">{log.log_date}</span>
                             <p className={`text-sm leading-snug flex-1 min-w-0 ${log.entry_type === 'milestone_done' ? 'text-green-300' : 'text-stone-300'}`}>
@@ -873,7 +873,7 @@ export default function Board() {
                             onClick={() => setShowAllLogs(v => !v)}
                             className="text-xs text-stone-600 hover:text-stone-400 mt-2 transition-colors"
                           >
-                            {showAllLogs ? '▲ 折りたたむ' : `▼ 全${selectedProject.logs!.length}件を見る`}
+                            {showAllLogs ? '▲ 最新5件に戻す' : `▲ 全${selectedProject.logs!.length}件を見る（古い履歴を展開）`}
                           </button>
                         )}
                       </>
