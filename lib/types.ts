@@ -30,6 +30,7 @@ export interface ProjectLog {
   log_date: string;
   content: string;
   source?: string | null;
+  entry_type: 'progress' | 'milestone_done';
   created_at: string;
 }
 export type ReelKind = 'shokunin' | 'shashinka' | 'ldl';

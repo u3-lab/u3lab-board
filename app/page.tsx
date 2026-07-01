@@ -421,6 +421,7 @@ export default function Board() {
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'someday'>('today');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [newLogContent, setNewLogContent] = useState('');
+  const [newLogType, setNewLogType] = useState<'progress' | 'milestone_done'>('progress');
   const [showLogForm, setShowLogForm] = useState(false);
   const [showAllLogs, setShowAllLogs] = useState(false);
   const [showAllDone, setShowAllDone] = useState(false);
@@ -533,7 +534,7 @@ export default function Board() {
     const res = await fetch('/api/project-log', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project_id: projectId, content: content.trim(), log_date: jstDate }),
+      body: JSON.stringify({ project_id: projectId, content: content.trim(), log_date: jstDate, entry_type: newLogType }),
     });
     if (res.ok) {
       const newLog = await res.json();
@@ -806,26 +807,38 @@ export default function Board() {
                       </button>
                     </div>
                     {showLogForm && (
-                      <div className="flex gap-2 mb-3">
-                        <input
-                          autoFocus
-                          value={newLogContent}
-                          onChange={e => setNewLogContent(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' && e.shiftKey) {
-                              addProjectLog(selectedProject.id, newLogContent);
-                              setNewLogContent('');
-                              setShowLogForm(false);
-                            }
-                            if (e.key === 'Escape') { setShowLogForm(false); setNewLogContent(''); }
-                          }}
-                          placeholder="進捗・メモ… (Shift+Enterで記録)"
-                          className="flex-1 text-sm border border-stone-600 rounded px-3 py-1.5 bg-stone-700 text-stone-100 placeholder-stone-500 outline-none focus:border-stone-400"
-                        />
-                        <button
-                          onClick={() => { addProjectLog(selectedProject.id, newLogContent); setNewLogContent(''); setShowLogForm(false); }}
-                          className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white flex-shrink-0"
-                        >記録</button>
+                      <div className="flex flex-col gap-2 mb-3">
+                        <div className="flex gap-2">
+                          <input
+                            autoFocus
+                            value={newLogContent}
+                            onChange={e => setNewLogContent(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' && e.shiftKey) {
+                                addProjectLog(selectedProject.id, newLogContent);
+                                setNewLogContent('');
+                                setShowLogForm(false);
+                              }
+                              if (e.key === 'Escape') { setShowLogForm(false); setNewLogContent(''); setNewLogType('progress'); }
+                            }}
+                            placeholder="進捗・メモ… (Shift+Enterで記録)"
+                            className="flex-1 text-sm border border-stone-600 rounded px-3 py-1.5 bg-stone-700 text-stone-100 placeholder-stone-500 outline-none focus:border-stone-400"
+                          />
+                          <button
+                            onClick={() => { addProjectLog(selectedProject.id, newLogContent); setNewLogContent(''); setNewLogType('progress'); setShowLogForm(false); }}
+                            className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white flex-shrink-0"
+                          >記録</button>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setNewLogType('progress')}
+                            className={`text-xs px-2.5 py-1 rounded border transition-colors ${newLogType === 'progress' ? 'border-blue-600 text-blue-400 bg-blue-900/20' : 'border-stone-600 text-stone-500 hover:border-stone-400'}`}
+                          >進捗</button>
+                          <button
+                            onClick={() => setNewLogType('milestone_done')}
+                            className={`text-xs px-2.5 py-1 rounded border transition-colors ${newLogType === 'milestone_done' ? 'border-green-600 text-green-400 bg-green-900/20' : 'border-stone-600 text-stone-500 hover:border-stone-400'}`}
+                          >🎯 済み</button>
+                        </div>
                       </div>
                     )}
                     {(selectedProject.logs?.length ?? 0) === 0 ? (
@@ -833,9 +846,11 @@ export default function Board() {
                     ) : (
                       <>
                         {(showAllLogs ? selectedProject.logs! : selectedProject.logs!.slice(0, 5)).map(log => (
-                          <div key={log.id} className="flex gap-3 py-2 border-b border-stone-800">
+                          <div key={log.id} className={`flex gap-3 py-2 border-b border-stone-800 ${log.entry_type === 'milestone_done' ? 'bg-green-950/20' : ''}`}>
                             <span className="text-xs text-stone-600 flex-shrink-0 tabular-nums w-16">{log.log_date}</span>
-                            <p className="text-sm text-stone-300 leading-snug flex-1 min-w-0">{log.content}</p>
+                            <p className={`text-sm leading-snug flex-1 min-w-0 ${log.entry_type === 'milestone_done' ? 'text-green-300' : 'text-stone-300'}`}>
+                              {log.entry_type === 'milestone_done' && <span className="mr-1">🎯</span>}{log.content}
+                            </p>
                             {log.source && <span className="text-xs text-stone-600 flex-shrink-0">{log.source}</span>}
                           </div>
                         ))}
