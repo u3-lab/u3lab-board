@@ -26,14 +26,23 @@ function todayLabel() {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日(${days[d.getDay()]})`;
 }
 
-function CheckCircle({ onDone }: { onDone: () => void }) {
-  return (
+function StatusToggle({ status, onStart, onDone }: { status: string; onStart: () => void; onDone: () => void }) {
+  const isInProgress = status === 'in_progress';
+  return isInProgress ? (
     <button
       onClick={onDone}
-      className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-stone-600 hover:border-green-500 hover:bg-green-900/40 flex items-center justify-center transition-all group/check"
+      className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-green-600 bg-green-900/30 hover:border-green-400 hover:bg-green-800/50 flex items-center justify-center transition-all"
       title="完了にする"
     >
-      <span className="text-transparent group-hover/check:text-green-500 text-xs leading-none transition-colors select-none">✓</span>
+      <span className="text-green-500 text-xs leading-none select-none">✓</span>
+    </button>
+  ) : (
+    <button
+      onClick={onStart}
+      className="flex-shrink-0 w-5 h-5 rounded-full border-2 border-stone-600 hover:border-blue-500 hover:bg-blue-900/30 flex items-center justify-center transition-all group/check"
+      title="開始する"
+    >
+      <span className="text-transparent group-hover/check:text-blue-400 text-xs leading-none transition-colors select-none">▶</span>
     </button>
   );
 }
@@ -63,7 +72,7 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday }: {
   if (editing) {
     return (
       <div className="flex items-center gap-2 py-3 border-b border-stone-700">
-        <CheckCircle onDone={() => onDone(task.id)} />
+        <StatusToggle status={task.status} onStart={() => onStart(task.id)} onDone={() => onDone(task.id)} />
         <input
           autoFocus
           value={editTitle}
@@ -82,7 +91,7 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday }: {
 
   return (
     <div className="flex items-center gap-3 py-3 border-b border-stone-700 group/row">
-      <CheckCircle onDone={() => onDone(task.id)} />
+      <StatusToggle status={task.status} onStart={() => onStart(task.id)} onDone={() => onDone(task.id)} />
       <span className="text-base flex-shrink-0">{PRIORITY_ICON[task.priority]}</span>
       <div className="flex-1 min-w-0">
         <p className="text-sm text-stone-200 truncate">{task.title}</p>
@@ -122,15 +131,6 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday }: {
       >
         ×
       </button>
-      {!hasStarted && task.assignee === 'yuuki' && !onMarkToday && (
-        <button
-          onClick={() => onStart(task.id)}
-          className="flex-shrink-0 text-xs px-1.5 py-1 text-stone-500 hover:text-green-500 transition-colors opacity-0 group-hover/row:opacity-100"
-          title="開始時刻を記録"
-        >
-          ▶
-        </button>
-      )}
     </div>
   );
 }
@@ -467,7 +467,7 @@ export default function Board() {
     const res = await fetch(`/api/tasks?id=${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ started_at: new Date().toISOString() }),
+      body: JSON.stringify({ status: 'in_progress', started_at: new Date().toISOString() }),
     });
     if (res.ok) {
       const updated: Task = await res.json();
