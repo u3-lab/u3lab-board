@@ -467,7 +467,7 @@ export default function Board() {
     const res = await fetch(`/api/tasks?id=${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'today', completed_at: null }),
+      body: JSON.stringify({ status: 'today', completed_at: null, archived_at: null }),
     });
     if (res.ok) {
       const updated: Task = await res.json();
