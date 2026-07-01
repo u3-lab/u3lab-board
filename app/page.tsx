@@ -247,7 +247,7 @@ function ReelsView({
 
   // Alert: 過去日 × 未投稿
   const jstToday = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
-  const alertReels = reels.filter(r => r.publish_date && r.publish_date < jstToday && r.status !== '投稿済み')
+  const alertReels = reels.filter(r => r.publish_date && r.publish_date < jstToday && r.status !== '投稿済み' && r.status !== '下書き')
     .sort((a, b) => (a.publish_date ?? '') < (b.publish_date ?? '') ? -1 : 1);
 
   // Calendar helpers
