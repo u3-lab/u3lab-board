@@ -92,7 +92,7 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday }: {
   return (
     <div className="flex items-center gap-3 py-3 border-b border-stone-700 group/row">
       <StatusToggle status={task.status} onStart={() => onStart(task.id)} onDone={() => onDone(task.id)} />
-      <span className="text-base flex-shrink-0">{PRIORITY_ICON[task.priority]}</span>
+      <span className="text-base flex-shrink-0">{task.status === 'in_progress' ? '🔵' : PRIORITY_ICON[task.priority]}</span>
       <div className="flex-1 min-w-0">
         <p className="text-sm text-stone-200 truncate">{task.title}</p>
         <p className="text-xs text-stone-500 mt-0.5">
