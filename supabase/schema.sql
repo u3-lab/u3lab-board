@@ -110,8 +110,11 @@ CREATE TABLE projects (
   blocker_detail TEXT,
   provenance     TEXT,
   summary        TEXT,
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  no             INTEGER
 );
+
+CREATE UNIQUE INDEX projects_no_uidx ON projects (no) WHERE no IS NOT NULL;
 
 -- RLS: 現在無効（service_role/APIルート経由のみで運用中）
 
