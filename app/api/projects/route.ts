@@ -2,20 +2,37 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import type { Project } from '@/lib/types';
 
-// GET /api/projects  → all projects with task counts
+// GET /api/projects  → all projects with task counts and recent logs
 export async function GET() {
   const db = supabaseAdmin();
 
-  const [{ data: projects, error }, { data: taskCounts, error: tcErr }] = await Promise.all([
+  const [
+    { data: projects, error },
+    { data: taskCounts, error: tcErr },
+    { data: doneTasks, error: dtErr },
+    { data: logs, error: logErr },
+  ] = await Promise.all([
     db.from('projects').select('*').order('created_at', { ascending: false }),
     db.from('tasks')
       .select('project_id, status, due_date')
       .not('project_id', 'is', null)
       .is('archived_at', null),
+    db.from('tasks')
+      .select('id, title, status, completed_at, project_id')
+      .not('project_id', 'is', null)
+      .eq('status', 'done')
+      .order('completed_at', { ascending: false })
+      .limit(200),
+    db.from('project_log')
+      .select('*')
+      .order('log_date', { ascending: false })
+      .limit(500),
   ]);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (tcErr) return NextResponse.json({ error: tcErr.message }, { status: 500 });
+  if (dtErr) return NextResponse.json({ error: dtErr.message }, { status: 500 });
+  if (logErr) return NextResponse.json({ error: logErr.message }, { status: 500 });
 
   const todayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
@@ -28,10 +45,27 @@ export async function GET() {
     countMap.set(t.project_id, c);
   }
 
+  const doneTaskMap = new Map<string, typeof doneTasks>();
+  for (const t of doneTasks ?? []) {
+    if (!t.project_id) continue;
+    const arr = doneTaskMap.get(t.project_id) ?? [];
+    arr.push(t);
+    doneTaskMap.set(t.project_id, arr);
+  }
+
+  const logMap = new Map<string, typeof logs>();
+  for (const l of logs ?? []) {
+    const arr = logMap.get(l.project_id) ?? [];
+    arr.push(l);
+    logMap.set(l.project_id, arr);
+  }
+
   const result: Project[] = (projects ?? []).map(p => ({
     ...p,
     task_count_today: countMap.get(p.id)?.today ?? 0,
     task_count_upcoming: countMap.get(p.id)?.upcoming ?? 0,
+    done_tasks: (doneTaskMap.get(p.id) ?? []).slice(0, 10) as Project['done_tasks'],
+    logs: (logMap.get(p.id) ?? []).slice(0, 10) as Project['logs'],
   }));
 
   return NextResponse.json(result);

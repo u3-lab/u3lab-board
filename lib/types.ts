@@ -15,10 +15,22 @@ export interface Project {
   blocker_type?: BlockerType | null;
   blocker_detail?: string | null;
   provenance?: string | null;
+  summary?: string | null;
   created_at: string;
   // joined fields (from API)
   task_count_today?: number;
   task_count_upcoming?: number;
+  logs?: ProjectLog[];
+  done_tasks?: Task[];
+}
+
+export interface ProjectLog {
+  id: string;
+  project_id: string;
+  log_date: string;
+  content: string;
+  source?: string | null;
+  created_at: string;
 }
 export type ReelKind = 'shokunin' | 'shashinka' | 'ldl';
 export type ReelStatus = '下書き' | '収録待ち' | '収録済み' | '撮影済み' | '編集待ち' | '予約済み' | '投稿済み' | '削除予定';

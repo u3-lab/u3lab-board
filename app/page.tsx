@@ -148,12 +148,15 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
       onClick={onClick}
       className="border border-stone-700 rounded-lg p-4 hover:border-stone-500 cursor-pointer transition-colors bg-stone-800/50"
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
+      <div className="flex items-start justify-between gap-2 mb-1.5">
         <p className="text-sm font-medium text-stone-100 leading-snug">{project.name}</p>
         <span className={`text-xs flex-shrink-0 font-medium ${PROJECT_STATUS_COLOR[project.status]}`}>
           {PROJECT_STATUS_LABEL[project.status]}
         </span>
       </div>
+      {project.summary && (
+        <p className="text-xs text-stone-400 mb-1.5 line-clamp-1">{project.summary}</p>
+      )}
       {project.next_action && (
         <p className="text-xs text-stone-400 mb-2 line-clamp-2">→ {project.next_action}</p>
       )}
@@ -417,6 +420,10 @@ export default function Board() {
   const [newReelDate, setNewReelDate] = useState('');
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'someday'>('today');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [newLogContent, setNewLogContent] = useState('');
+  const [showLogForm, setShowLogForm] = useState(false);
+  const [showAllLogs, setShowAllLogs] = useState(false);
+  const [showAllDone, setShowAllDone] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newPriority, setNewPriority] = useState<TaskPriority>('medium');
   const [newDest, setNewDest] = useState<'today' | 'due' | 'someday'>('today');
@@ -517,6 +524,27 @@ export default function Board() {
     if (res.ok) {
       const updated: Task = await res.json();
       setTasks(ts => ts.map(t => t.id === id ? updated : t));
+    }
+  }, []);
+
+  const addProjectLog = useCallback(async (projectId: string, content: string) => {
+    if (!content.trim()) return;
+    const jstDate = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    const res = await fetch('/api/project-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: projectId, content: content.trim(), log_date: jstDate }),
+    });
+    if (res.ok) {
+      const newLog = await res.json();
+      setProjects(ps => ps.map(p => p.id === projectId
+        ? { ...p, logs: [newLog, ...(p.logs ?? [])] }
+        : p
+      ));
+      setSelectedProject(sp => sp?.id === projectId
+        ? { ...sp, logs: [newLog, ...(sp.logs ?? [])] }
+        : sp
+      );
     }
   }, []);
 
@@ -725,35 +753,131 @@ export default function Board() {
             <>
               {selectedProject ? (
                 <>
-                  <div className="flex items-center gap-3 mb-6">
+                  <div className="flex items-center gap-3 mb-5">
                     <button
-                      onClick={() => setSelectedProject(null)}
+                      onClick={() => { setSelectedProject(null); setShowLogForm(false); setShowAllLogs(false); setShowAllDone(false); }}
                       className="text-xs text-stone-500 hover:text-stone-300 transition-colors"
                     >
                       ← 一覧に戻る
                     </button>
                   </div>
-                  <div className="border border-stone-700 rounded-lg p-5 mb-6">
-                    <div className="flex items-start justify-between gap-3 mb-3">
+
+                  {/* ヘッダー */}
+                  <div className="border border-stone-700 rounded-lg p-5 mb-5">
+                    <div className="flex items-start justify-between gap-3 mb-2">
                       <h2 className="text-base font-semibold text-stone-100">{selectedProject.name}</h2>
                       <span className={`text-xs font-medium flex-shrink-0 ${PROJECT_STATUS_COLOR[selectedProject.status]}`}>
                         {PROJECT_STATUS_LABEL[selectedProject.status]}
                       </span>
                     </div>
-                    {selectedProject.category && <p className="text-xs text-stone-500 mb-2">{selectedProject.category}</p>}
-                    {selectedProject.assignees.length > 0 && (
-                      <p className="text-xs text-stone-400 mb-1">担当: {selectedProject.assignees.join(', ')}{selectedProject.assignee_role ? ` (${selectedProject.assignee_role})` : ''}</p>
+
+                    {/* 概要 */}
+                    {selectedProject.summary && (
+                      <p className="text-sm text-stone-300 mb-3 leading-relaxed">{selectedProject.summary}</p>
                     )}
+
+                    {/* メタ */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-500 mb-2">
+                      {selectedProject.category && <span>カテゴリ: {selectedProject.category}</span>}
+                      {selectedProject.assignees.length > 0 && (
+                        <span>担当: {selectedProject.assignees.join(', ')}{selectedProject.assignee_role ? ` (${selectedProject.assignee_role})` : ''}</span>
+                      )}
+                      {selectedProject.due_date && <span>期限: {selectedProject.due_date}</span>}
+                    </div>
+
+                    {/* NA・ブロッカー */}
                     {selectedProject.next_action && (
                       <p className="text-sm text-stone-300 mt-3 border-l-2 border-stone-600 pl-3">→ {selectedProject.next_action}</p>
                     )}
                     {selectedProject.blocker_type && selectedProject.blocker_type !== 'none' && (
                       <p className="text-xs text-red-400 mt-2">⚠ ブロッカー: {selectedProject.blocker_detail ?? selectedProject.blocker_type}</p>
                     )}
-                    {selectedProject.due_date && (
-                      <p className="text-xs text-stone-500 mt-2">期限: {selectedProject.due_date}</p>
-                    )}
                   </div>
+
+                  {/* 流れ */}
+                  <section className="mb-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider">流れ</h3>
+                      <button
+                        onClick={() => { setShowLogForm(v => !v); setNewLogContent(''); }}
+                        className="text-xs text-stone-600 hover:text-stone-300 transition-colors"
+                      >
+                        + 記録
+                      </button>
+                    </div>
+                    {showLogForm && (
+                      <div className="flex gap-2 mb-3">
+                        <input
+                          autoFocus
+                          value={newLogContent}
+                          onChange={e => setNewLogContent(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && e.shiftKey) {
+                              addProjectLog(selectedProject.id, newLogContent);
+                              setNewLogContent('');
+                              setShowLogForm(false);
+                            }
+                            if (e.key === 'Escape') { setShowLogForm(false); setNewLogContent(''); }
+                          }}
+                          placeholder="進捗・メモ… (Shift+Enterで記録)"
+                          className="flex-1 text-sm border border-stone-600 rounded px-3 py-1.5 bg-stone-700 text-stone-100 placeholder-stone-500 outline-none focus:border-stone-400"
+                        />
+                        <button
+                          onClick={() => { addProjectLog(selectedProject.id, newLogContent); setNewLogContent(''); setShowLogForm(false); }}
+                          className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white flex-shrink-0"
+                        >記録</button>
+                      </div>
+                    )}
+                    {(selectedProject.logs?.length ?? 0) === 0 ? (
+                      <p className="text-sm text-stone-600 py-3 text-center">ログなし</p>
+                    ) : (
+                      <>
+                        {(showAllLogs ? selectedProject.logs! : selectedProject.logs!.slice(0, 5)).map(log => (
+                          <div key={log.id} className="flex gap-3 py-2 border-b border-stone-800">
+                            <span className="text-xs text-stone-600 flex-shrink-0 tabular-nums w-16">{log.log_date}</span>
+                            <p className="text-sm text-stone-300 leading-snug flex-1 min-w-0">{log.content}</p>
+                            {log.source && <span className="text-xs text-stone-600 flex-shrink-0">{log.source}</span>}
+                          </div>
+                        ))}
+                        {(selectedProject.logs?.length ?? 0) > 5 && (
+                          <button
+                            onClick={() => setShowAllLogs(v => !v)}
+                            className="text-xs text-stone-600 hover:text-stone-400 mt-2 transition-colors"
+                          >
+                            {showAllLogs ? '▲ 折りたたむ' : `▼ 全${selectedProject.logs!.length}件を見る`}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </section>
+
+                  {/* 済み */}
+                  {(selectedProject.done_tasks?.length ?? 0) > 0 && (
+                    <section className="mb-5">
+                      <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">済み</h3>
+                      {(showAllDone ? selectedProject.done_tasks! : selectedProject.done_tasks!.slice(0, 5)).map(t => (
+                        <div key={t.id} className="flex items-center gap-2 py-2 border-b border-stone-800">
+                          <span className="text-green-700 text-xs flex-shrink-0">✓</span>
+                          <p className="text-sm text-stone-500 line-through truncate flex-1 min-w-0">{t.title}</p>
+                          {t.completed_at && (
+                            <span className="text-xs text-stone-700 flex-shrink-0 ml-auto">
+                              {new Date(t.completed_at).toLocaleDateString('ja-JP', { month: 'numeric', day: 'numeric' })}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      {(selectedProject.done_tasks?.length ?? 0) > 5 && (
+                        <button
+                          onClick={() => setShowAllDone(v => !v)}
+                          className="text-xs text-stone-600 hover:text-stone-400 mt-2 transition-colors"
+                        >
+                          {showAllDone ? '▲ 折りたたむ' : `▼ 全${selectedProject.done_tasks!.length}件を見る`}
+                        </button>
+                      )}
+                    </section>
+                  )}
+
+                  {/* 関連タスク */}
                   <section>
                     <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
                       関連タスク（今日やる）
