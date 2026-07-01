@@ -463,6 +463,19 @@ export default function Board() {
     }
   }, []);
 
+  const markUndone = useCallback(async (id: string) => {
+    const res = await fetch(`/api/tasks?id=${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'today', completed_at: null }),
+    });
+    if (res.ok) {
+      const updated: Task = await res.json();
+      setDoneTasks(ds => ds.filter(t => t.id !== id));
+      setTasks(ts => [updated, ...ts]);
+    }
+  }, []);
+
   const markStarted = useCallback(async (id: string) => {
     const res = await fetch(`/api/tasks?id=${id}`, {
       method: 'PATCH',
@@ -876,10 +889,14 @@ export default function Board() {
                     <span className="ml-auto">{showDone ? '▼' : '◀︎'}</span>
                   </button>
                   {showDone && doneTasks.map(t => (
-                    <div key={t.id} className="flex items-center gap-3 py-2 border-b border-stone-700 opacity-40">
-                      <span className="w-5 h-5 rounded-full border-2 border-green-700 flex items-center justify-center flex-shrink-0">
-                        <span className="text-green-500 text-xs leading-none">✓</span>
-                      </span>
+                    <div key={t.id} className="flex items-center gap-3 py-2 border-b border-stone-700 opacity-40 hover:opacity-70 transition-opacity group/done">
+                      <button
+                        onClick={() => markUndone(t.id)}
+                        className="w-5 h-5 rounded-full border-2 border-green-700 hover:border-stone-500 hover:bg-stone-800 flex items-center justify-center flex-shrink-0 transition-all group/undone"
+                        title="完了を取り消す（今日やるに戻す）"
+                      >
+                        <span className="text-green-500 group-hover/undone:text-stone-400 text-xs leading-none transition-colors">✓</span>
+                      </button>
                       <p className="text-sm text-stone-400 line-through truncate">{t.title}</p>
                     </div>
                   ))}
