@@ -93,3 +93,43 @@ CREATE INDEX idx_reels_kind         ON reels (kind);
 ALTER TABLE reels ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "authenticated_all" ON reels
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Projects table (プロジェクト一覧・俯瞰ビュー)
+CREATE TABLE projects (
+  id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  name           TEXT        NOT NULL,
+  status         TEXT        NOT NULL DEFAULT 'active'
+                 CHECK (status IN ('active', 'waiting', 'stalled', 'done')),
+  category       TEXT,
+  assignees      TEXT[]      NOT NULL DEFAULT '{}',
+  assignee_role  TEXT,
+  due_date       DATE,
+  last_updated   DATE,
+  next_action    TEXT,
+  blocker_type   TEXT        CHECK (blocker_type IN ('external', 'internal', 'none')),
+  blocker_detail TEXT,
+  provenance     TEXT,
+  summary        TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- RLS: 現在無効（service_role/APIルート経由のみで運用中）
+
+-- Project log table (プロジェクトごとの活動ログ・中粒度)
+CREATE TABLE project_log (
+  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id   UUID        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  log_date     DATE        NOT NULL DEFAULT CURRENT_DATE,
+  content      TEXT        NOT NULL,
+  source       TEXT,
+  entry_type   TEXT        NOT NULL DEFAULT 'progress'
+               CHECK (entry_type IN ('progress', 'milestone_done')),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX project_log_project_id_idx ON project_log (project_id);
+CREATE INDEX project_log_log_date_idx   ON project_log (log_date DESC);
+
+ALTER TABLE project_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "authenticated_all" ON project_log
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
