@@ -72,7 +72,7 @@ export async function GET() {
       task_count_today: countMap.get(p.id)?.today ?? 0,
       task_count_upcoming: countMap.get(p.id)?.upcoming ?? 0,
       done_tasks: (doneTaskMap.get(p.id) ?? []).slice(0, 10) as Project['done_tasks'],
-      logs: pLogs.slice(0, 10) as Project['logs'],
+      logs: pLogs.slice(0, 50) as Project['logs'],
       _activity: activityDate,
     };
   });
