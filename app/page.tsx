@@ -26,6 +26,17 @@ function todayLabel() {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日(${days[d.getDay()]})`;
 }
 
+function HelpTip({ text }: { text: string }) {
+  return (
+    <span className="relative group/tip ml-1 cursor-default inline-flex items-center">
+      <span className="text-stone-600 text-xs border border-stone-700 rounded-full w-3.5 h-3.5 inline-flex items-center justify-center leading-none hover:text-stone-400 hover:border-stone-500 transition-colors select-none">?</span>
+      <span className="absolute left-0 bottom-full mb-1.5 w-52 text-xs text-stone-300 bg-stone-800 border border-stone-600 rounded px-2.5 py-2 opacity-0 group-hover/tip:opacity-100 transition-opacity pointer-events-none z-20 leading-relaxed shadow-lg">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 function StatusToggle({ status, onStart, onDone }: { status: string; onStart: () => void; onDone: () => void }) {
   const isInProgress = status === 'in_progress';
   return isInProgress ? (
@@ -798,7 +809,10 @@ export default function Board() {
                   {/* 流れ */}
                   <section className="mb-5">
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider">流れ</h3>
+                      <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider flex items-center">
+                        流れ
+                        <HelpTip text="プロジェクトの進捗ログ。「+ 記録」ボタンで追記できます。「🎯 済み」は完了マイルストーンとして緑色で強調表示されます。" />
+                      </h3>
                       <button
                         onClick={() => { setShowLogForm(v => !v); setNewLogContent(''); }}
                         className="text-xs text-stone-600 hover:text-stone-300 transition-colors"
@@ -869,7 +883,10 @@ export default function Board() {
                   {/* 済み */}
                   {(selectedProject.done_tasks?.length ?? 0) > 0 && (
                     <section className="mb-5">
-                      <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">済み</h3>
+                      <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3 flex items-center">
+                      済み
+                      <HelpTip text="このプロジェクトに紐づく完了タスクの一覧です。" />
+                    </h3>
                       {(showAllDone ? selectedProject.done_tasks! : selectedProject.done_tasks!.slice(0, 5)).map(t => (
                         <div key={t.id} className="flex items-center gap-2 py-2 border-b border-stone-800">
                           <span className="text-green-700 text-xs flex-shrink-0">✓</span>
@@ -894,8 +911,9 @@ export default function Board() {
 
                   {/* 関連タスク */}
                   <section>
-                    <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
+                    <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3 flex items-center">
                       関連タスク（今日やる）
+                      <HelpTip text="このプロジェクトに紐づく「今日やる」ステータスのタスクです。タスク画面で project_id を設定すると表示されます。" />
                     </h3>
                     {tasks.filter(t => t.project_id === selectedProject.id && t.status === 'today').length === 0
                       ? <p className="text-sm text-stone-600 py-4 text-center">なし</p>
