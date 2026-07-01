@@ -47,7 +47,6 @@ export async function POST(req: NextRequest) {
     .eq('status', 'done')
     .gte('completed_at', `${todayStr}T00:00:00+09:00`)
     .lte('completed_at', `${todayStr}T23:59:59+09:00`)
-    .is('archived_at', null)
     .order('completed_at', { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
