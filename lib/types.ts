@@ -21,7 +21,7 @@ export interface Project {
   task_count_upcoming?: number;
 }
 export type ReelKind = 'shokunin' | 'shashinka' | 'ldl';
-export type ReelStatus = '下書き' | '収録待ち' | '撮影済み' | '編集待ち' | '予約済み' | '投稿済み' | '削除予定';
+export type ReelStatus = '下書き' | '収録待ち' | '収録済み' | '撮影済み' | '編集待ち' | '予約済み' | '投稿済み' | '削除予定';
 
 export interface Reel {
   id: string;

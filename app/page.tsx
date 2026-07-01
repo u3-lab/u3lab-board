@@ -173,10 +173,11 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
 
 const KIND_LABEL: Record<string, string> = { shokunin: '住職', shashinka: '写真家', ldl: 'LDL' };
 const KIND_COLOR: Record<string, string> = { shokunin: 'text-amber-400', shashinka: 'text-sky-400', ldl: 'text-emerald-400' };
-const REEL_STATUS_ORDER: ReelStatus[] = ['下書き', '収録待ち', '撮影済み', '編集待ち', '予約済み', '投稿済み', '削除予定'];
+const REEL_STATUS_ORDER: ReelStatus[] = ['下書き', '収録待ち', '収録済み', '撮影済み', '編集待ち', '予約済み', '投稿済み', '削除予定'];
 const REEL_STATUS_COLOR: Record<ReelStatus, string> = {
   '下書き': 'border-stone-600 text-stone-400',
   '収録待ち': 'border-yellow-700 text-yellow-400',
+  '収録済み': 'border-orange-700 text-orange-400',
   '撮影済み': 'border-blue-700 text-blue-400',
   '編集待ち': 'border-purple-700 text-purple-400',
   '予約済み': 'border-green-700 text-green-400',
@@ -224,13 +225,13 @@ function ReelsView({
   onAdd, onStatusChange, onDelete,
 }: {
   reels: Reel[];
-  view: 'kanban' | 'calendar';
+  view: 'alert' | 'kanban' | 'calendar';
   month: string;
   showForm: boolean;
   newTheme: string;
   newKind: ReelKind;
   newDate: string;
-  onViewChange: (v: 'kanban' | 'calendar') => void;
+  onViewChange: (v: 'alert' | 'kanban' | 'calendar') => void;
   onMonthChange: (m: string) => void;
   onToggleForm: () => void;
   onNewThemeChange: (v: string) => void;
@@ -243,6 +244,11 @@ function ReelsView({
   const [y, m] = month.split('-').map(Number);
   const prevMonth = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
   const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+
+  // Alert: 過去日 × 未投稿
+  const jstToday = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  const alertReels = reels.filter(r => r.publish_date && r.publish_date < jstToday && r.status !== '投稿済み')
+    .sort((a, b) => (a.publish_date ?? '') < (b.publish_date ?? '') ? -1 : 1);
 
   // Calendar helpers
   const daysInMonth = new Date(y, m, 0).getDate();
@@ -269,6 +275,9 @@ function ReelsView({
           <button onClick={() => onMonthChange(nextMonth)} className="px-2 py-1 text-stone-500 hover:text-stone-200">▶</button>
         </div>
         <div className="flex rounded overflow-hidden border border-stone-700">
+          <button onClick={() => onViewChange('alert')} className={`px-3 py-1 text-xs transition-colors ${view === 'alert' ? 'bg-red-900/60 text-red-300' : 'text-stone-500 hover:text-stone-300'}`}>
+            ⚠ 要確認{alertReels.length > 0 && <span className="ml-1 text-red-400 font-semibold">{alertReels.length}</span>}
+          </button>
           <button onClick={() => onViewChange('kanban')} className={`px-3 py-1 text-xs transition-colors ${view === 'kanban' ? 'bg-stone-700 text-stone-100' : 'text-stone-500 hover:text-stone-300'}`}>かんばん</button>
           <button onClick={() => onViewChange('calendar')} className={`px-3 py-1 text-xs transition-colors ${view === 'calendar' ? 'bg-stone-700 text-stone-100' : 'text-stone-500 hover:text-stone-300'}`}>カレンダー</button>
         </div>
@@ -302,6 +311,41 @@ function ReelsView({
 
       {reels.length === 0 && !showForm && (
         <p className="text-sm text-stone-600 py-8 text-center">リールなし（まだ Notion 移行前）</p>
+      )}
+
+      {/* alert view */}
+      {view === 'alert' && (
+        <div>
+          {alertReels.length === 0 ? (
+            <p className="text-sm text-stone-600 py-8 text-center">要確認なし 🎉</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-stone-500 mb-2">過去日 × 未投稿（{alertReels.length}件）— 配信済みなら「投稿済みにする」を押してください</p>
+              {alertReels.map(r => (
+                <div key={r.id} className="bg-stone-800 border border-red-900/50 rounded-lg p-3 flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-xs font-medium ${KIND_COLOR[r.kind] ?? 'text-stone-400'}`}>{KIND_LABEL[r.kind] ?? r.kind}</span>
+                      <span className={`border rounded px-1.5 py-0.5 text-xs ${REEL_STATUS_COLOR[r.status as ReelStatus] ?? 'border-stone-600 text-stone-400'}`}>{r.status}</span>
+                      {r.publish_date && <span className="text-xs text-red-400">📅 {r.publish_date}</span>}
+                    </div>
+                    <p className="text-sm text-stone-200 leading-snug truncate">{r.theme ?? '(テーマ未設定)'}</p>
+                  </div>
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => onStatusChange(r.id, '投稿済み')}
+                      className="text-xs px-2 py-1 bg-stone-700 text-stone-200 rounded hover:bg-green-900/50 hover:text-green-300 transition-colors whitespace-nowrap"
+                    >✓ 投稿済みにする</button>
+                    <button
+                      onClick={() => onStatusChange(r.id, '削除予定')}
+                      className="text-xs px-2 py-1 text-stone-600 hover:text-red-400 transition-colors whitespace-nowrap"
+                    >→ 削除予定へ</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* kanban view */}
@@ -365,7 +409,7 @@ export default function Board() {
   const [showDone, setShowDone] = useState(false);
   const [activeNav, setActiveNav] = useState<'tasks' | 'projects' | 'reels'>('tasks');
   const [reels, setReels] = useState<Reel[]>([]);
-  const [reelsView, setReelsView] = useState<'kanban' | 'calendar'>('kanban');
+  const [reelsView, setReelsView] = useState<'alert' | 'kanban' | 'calendar'>('alert');
   const [reelMonth, setReelMonth] = useState(() => new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [showReelForm, setShowReelForm] = useState(false);
   const [newReelTheme, setNewReelTheme] = useState('');
@@ -397,11 +441,6 @@ export default function Board() {
 
   useEffect(() => {
     fetch(`/api/reels`).then(r => r.json()).then(d => setReels(Array.isArray(d) ? d : [])).catch(() => {});
-  }, []);
-
-  const loadReelsByMonth = useCallback(async (month: string) => {
-    const d = await fetch(`/api/reels?month=${month}`).then(r => r.json()).catch(() => []);
-    setReels(Array.isArray(d) ? d : []);
   }, []);
 
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -632,7 +671,7 @@ export default function Board() {
               newKind={newReelKind}
               newDate={newReelDate}
               onViewChange={setReelsView}
-              onMonthChange={(m) => { setReelMonth(m); loadReelsByMonth(m); }}
+              onMonthChange={setReelMonth}
               onToggleForm={() => setShowReelForm(v => !v)}
               onNewThemeChange={setNewReelTheme}
               onNewKindChange={setNewReelKind}
