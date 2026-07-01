@@ -835,6 +835,17 @@ export default function Board() {
                 ))}
               </div>
 
+              {/* 進行中 */}
+              {inProgress.length > 0 && (
+                <section className="mb-8">
+                  <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
+                    ⚙️ 進行中
+                    <span className="ml-2 text-stone-600 font-normal normal-case">({inProgress.length})</span>
+                  </h2>
+                  {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)}
+                </section>
+              )}
+
               {/* タブコンテンツ */}
               <section className="mb-8">
                 {activeTab === 'today' && (
@@ -865,17 +876,6 @@ export default function Board() {
                   : waiting.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
                 }
               </section>
-
-              {/* 進行中 */}
-              {inProgress.length > 0 && (
-                <section className="mb-8">
-                  <h2 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3">
-                    ⚙️ 進行中
-                    <span className="ml-2 text-stone-600 font-normal normal-case">({inProgress.length})</span>
-                  </h2>
-                  {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)}
-                </section>
-              )}
 
               {/* 今日の完了 */}
               {doneTasks.length > 0 && (
