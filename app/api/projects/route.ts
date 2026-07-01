@@ -61,13 +61,25 @@ export async function GET() {
     logMap.set(l.project_id, arr);
   }
 
-  const result: Project[] = (projects ?? []).map(p => ({
-    ...p,
-    task_count_today: countMap.get(p.id)?.today ?? 0,
-    task_count_upcoming: countMap.get(p.id)?.upcoming ?? 0,
-    done_tasks: (doneTaskMap.get(p.id) ?? []).slice(0, 10) as Project['done_tasks'],
-    logs: (logMap.get(p.id) ?? []).slice(0, 10) as Project['logs'],
-  }));
+  const withSort = (projects ?? []).map(p => {
+    const pLogs = logMap.get(p.id) ?? [];
+    // logs は log_date 降順なので先頭が最新
+    const maxLogDate = pLogs.length > 0 ? pLogs[0].log_date : null;
+    const candidates = [maxLogDate, p.last_updated, p.created_at?.slice(0, 10)].filter(Boolean) as string[];
+    const activityDate = candidates.sort().at(-1) ?? '';
+    return {
+      ...p,
+      task_count_today: countMap.get(p.id)?.today ?? 0,
+      task_count_upcoming: countMap.get(p.id)?.upcoming ?? 0,
+      done_tasks: (doneTaskMap.get(p.id) ?? []).slice(0, 10) as Project['done_tasks'],
+      logs: pLogs.slice(0, 10) as Project['logs'],
+      _activity: activityDate,
+    };
+  });
+
+  withSort.sort((a, b) => b._activity.localeCompare(a._activity));
+
+  const result: Project[] = withSort.map(({ _activity, ...p }) => p as Project);
 
   return NextResponse.json(result);
 }
