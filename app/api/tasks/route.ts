@@ -1,7 +1,6 @@
-import { NextRequest, NextResponse, after } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { Task } from '@/lib/types';
-import { writeActionEvent } from '@/lib/gcal-write';
 
 // GET /api/tasks                    → non-archived tasks
 // GET /api/tasks?completed_today=true → today's done tasks (JST)
@@ -65,17 +64,6 @@ export async function PATCH(req: NextRequest) {
   const db = supabaseAdmin();
   const { data, error } = await db.from('tasks').update(updates).eq('id', id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
-  // Write to 02行動 calendar for yuuki's completed tasks only
-  if (body.status === 'done' && data.assignee === 'yuuki') {
-    after(async () => {
-      try {
-        await writeActionEvent(data as Task);
-      } catch (err) {
-        console.error('[gcal-write] failed:', err instanceof Error ? err.message : String(err));
-      }
-    });
-  }
 
   return NextResponse.json(data);
 }
