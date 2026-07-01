@@ -65,3 +65,31 @@ CREATE TABLE schedules (
 
 ALTER TABLE schedules ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "authenticated_read" ON schedules FOR SELECT TO authenticated USING (true);
+
+-- Reels table (リール配信管理 Phase C)
+CREATE TABLE reels (
+  id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  kind         TEXT         NOT NULL CHECK (kind IN ('shokunin', 'shashinka', 'ldl')),
+  theme        TEXT,
+  status       TEXT         NOT NULL DEFAULT '下書き'
+               CHECK (status IN ('下書き', '収録待ち', '撮影済み', '編集待ち', '予約済み', '投稿済み', '削除予定')),
+  publish_date DATE,
+  request_date DATE,
+  memo         TEXT,
+  koyomi_meta  TEXT,
+  chatgpt_url  TEXT,
+  script       TEXT,
+  caption      TEXT,
+  extra        JSONB,
+  created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  posted_at    TIMESTAMPTZ,
+  notion_id    TEXT
+);
+
+CREATE INDEX idx_reels_status       ON reels (status);
+CREATE INDEX idx_reels_publish_date ON reels (publish_date);
+CREATE INDEX idx_reels_kind         ON reels (kind);
+
+ALTER TABLE reels ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "authenticated_all" ON reels
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);

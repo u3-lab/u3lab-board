@@ -1,6 +1,6 @@
 'use client';
 import { useState, useCallback, useEffect } from 'react';
-import type { Task, TaskStatus, TaskPriority, TaskCategory, TaskSource, Project, ProjectStatus } from '@/lib/types';
+import type { Task, TaskStatus, TaskPriority, TaskCategory, TaskSource, Project, ProjectStatus, Reel, ReelStatus, ReelKind } from '@/lib/types';
 import type { ScheduleEvent } from '@/app/api/schedule/route';
 
 const PRIORITY_ICON: Record<TaskPriority, string> = { high: '🔴', medium: '🟡', low: '🟢' };
@@ -171,6 +171,190 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
   );
 }
 
+const KIND_LABEL: Record<string, string> = { shokunin: '住職', shashinka: '写真家', ldl: 'LDL' };
+const KIND_COLOR: Record<string, string> = { shokunin: 'text-amber-400', shashinka: 'text-sky-400', ldl: 'text-emerald-400' };
+const REEL_STATUS_ORDER: ReelStatus[] = ['下書き', '収録待ち', '撮影済み', '編集待ち', '予約済み', '投稿済み', '削除予定'];
+const REEL_STATUS_COLOR: Record<ReelStatus, string> = {
+  '下書き': 'border-stone-600 text-stone-400',
+  '収録待ち': 'border-yellow-700 text-yellow-400',
+  '撮影済み': 'border-blue-700 text-blue-400',
+  '編集待ち': 'border-purple-700 text-purple-400',
+  '予約済み': 'border-green-700 text-green-400',
+  '投稿済み': 'border-stone-600 text-stone-500',
+  '削除予定': 'border-red-900 text-red-600',
+};
+
+function ReelCard({ reel, onStatusChange, onDelete }: {
+  reel: Reel;
+  onStatusChange: (id: string, status: ReelStatus) => void;
+  onDelete: (id: string) => void;
+}) {
+  const currentIdx = REEL_STATUS_ORDER.indexOf(reel.status);
+  const nextStatus = currentIdx < REEL_STATUS_ORDER.length - 2 ? REEL_STATUS_ORDER[currentIdx + 1] : null;
+  return (
+    <div className="bg-stone-800 border border-stone-700 rounded-lg p-3 text-xs group/card">
+      <div className="flex items-start justify-between gap-1 mb-1.5">
+        <span className={`font-medium text-xs ${KIND_COLOR[reel.kind] ?? 'text-stone-400'}`}>{KIND_LABEL[reel.kind] ?? reel.kind}</span>
+        <button onClick={() => onDelete(reel.id)} className="opacity-0 group-hover/card:opacity-100 text-stone-700 hover:text-red-500 transition-colors leading-none">×</button>
+      </div>
+      <p className="text-stone-200 text-sm leading-snug mb-2 line-clamp-2">{reel.theme ?? '(テーマ未設定)'}</p>
+      {reel.publish_date && <p className="text-stone-500 mb-2">📅 {reel.publish_date}</p>}
+      {reel.memo && <p className="text-stone-600 truncate mb-2">{reel.memo}</p>}
+      <div className="flex items-center justify-between gap-2">
+        <span className={`border rounded px-1.5 py-0.5 text-xs ${REEL_STATUS_COLOR[reel.status]}`}>{reel.status}</span>
+        {nextStatus && (
+          <button
+            onClick={() => onStatusChange(reel.id, nextStatus)}
+            className="text-xs text-stone-600 hover:text-stone-300 transition-colors"
+            title={`→ ${nextStatus}`}
+          >
+            → {nextStatus}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReelsView({
+  reels, view, month, showForm,
+  newTheme, newKind, newDate,
+  onViewChange, onMonthChange, onToggleForm,
+  onNewThemeChange, onNewKindChange, onNewDateChange,
+  onAdd, onStatusChange, onDelete,
+}: {
+  reels: Reel[];
+  view: 'kanban' | 'calendar';
+  month: string;
+  showForm: boolean;
+  newTheme: string;
+  newKind: ReelKind;
+  newDate: string;
+  onViewChange: (v: 'kanban' | 'calendar') => void;
+  onMonthChange: (m: string) => void;
+  onToggleForm: () => void;
+  onNewThemeChange: (v: string) => void;
+  onNewKindChange: (v: ReelKind) => void;
+  onNewDateChange: (v: string) => void;
+  onAdd: () => void;
+  onStatusChange: (id: string, status: ReelStatus) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [y, m] = month.split('-').map(Number);
+  const prevMonth = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+  const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+
+  // Calendar helpers
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const firstDow = new Date(y, m - 1, 1).getDay(); // 0=Sun
+  const calCells: (number | null)[] = [
+    ...Array<null>(firstDow).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  const reelsByDate: Record<string, Reel[]> = {};
+  for (const r of reels) {
+    if (r.publish_date) {
+      if (!reelsByDate[r.publish_date]) reelsByDate[r.publish_date] = [];
+      reelsByDate[r.publish_date].push(r);
+    }
+  }
+
+  return (
+    <div>
+      {/* toolbar */}
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-1 text-sm text-stone-300">
+          <button onClick={() => onMonthChange(prevMonth)} className="px-2 py-1 text-stone-500 hover:text-stone-200">◀</button>
+          <span className="tabular-nums">{y}年{m}月</span>
+          <button onClick={() => onMonthChange(nextMonth)} className="px-2 py-1 text-stone-500 hover:text-stone-200">▶</button>
+        </div>
+        <div className="flex rounded overflow-hidden border border-stone-700">
+          <button onClick={() => onViewChange('kanban')} className={`px-3 py-1 text-xs transition-colors ${view === 'kanban' ? 'bg-stone-700 text-stone-100' : 'text-stone-500 hover:text-stone-300'}`}>かんばん</button>
+          <button onClick={() => onViewChange('calendar')} className={`px-3 py-1 text-xs transition-colors ${view === 'calendar' ? 'bg-stone-700 text-stone-100' : 'text-stone-500 hover:text-stone-300'}`}>カレンダー</button>
+        </div>
+        <div className="flex-1" />
+        <button onClick={onToggleForm} className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white">+ リール追加</button>
+      </div>
+
+      {/* add form */}
+      {showForm && (
+        <div className="bg-stone-800 border border-stone-700 rounded-lg p-4 mb-4 flex flex-col gap-3">
+          <div className="flex gap-2 flex-wrap">
+            <input
+              autoFocus
+              value={newTheme}
+              onChange={e => onNewThemeChange(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') onAdd(); if (e.key === 'Escape') onToggleForm(); }}
+              placeholder="テーマ・タイトル"
+              className="flex-1 min-w-0 text-sm border border-stone-600 rounded px-3 py-1.5 bg-stone-700 text-stone-100 placeholder-stone-500 outline-none focus:border-stone-400"
+            />
+            <select value={newKind} onChange={e => onNewKindChange(e.target.value as ReelKind)} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200">
+              <option value="shokunin">住職</option>
+              <option value="shashinka">写真家</option>
+              <option value="ldl">LDL</option>
+            </select>
+            <input type="date" value={newDate} onChange={e => onNewDateChange(e.target.value)} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200 outline-none focus:border-stone-400" />
+            <button onClick={onAdd} className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white">追加</button>
+            <button onClick={onToggleForm} className="text-xs text-stone-400 hover:text-stone-200">キャンセル</button>
+          </div>
+        </div>
+      )}
+
+      {reels.length === 0 && !showForm && (
+        <p className="text-sm text-stone-600 py-8 text-center">リールなし（まだ Notion 移行前）</p>
+      )}
+
+      {/* kanban view */}
+      {view === 'kanban' && reels.length > 0 && (
+        <div className="grid grid-cols-1 gap-6">
+          {REEL_STATUS_ORDER.filter(s => reels.some(r => r.status === s)).map(status => (
+            <div key={status}>
+              <h3 className={`text-xs font-semibold uppercase tracking-wider mb-2 ${REEL_STATUS_COLOR[status]}`}>
+                {status} ({reels.filter(r => r.status === status).length})
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {reels.filter(r => r.status === status).map(r => (
+                  <ReelCard key={r.id} reel={r} onStatusChange={onStatusChange} onDelete={onDelete} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* calendar view */}
+      {view === 'calendar' && (
+        <div>
+          <div className="grid grid-cols-7 gap-px mb-1">
+            {['日','月','火','水','木','金','土'].map(d => (
+              <div key={d} className="text-center text-xs text-stone-600 py-1">{d}</div>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-px bg-stone-800 border border-stone-700 rounded-lg overflow-hidden">
+            {calCells.map((day, i) => {
+              if (!day) return <div key={`e-${i}`} className="bg-stone-900 min-h-16 p-1" />;
+              const dateStr = `${month}-${String(day).padStart(2, '0')}`;
+              const dayReels = reelsByDate[dateStr] ?? [];
+              const todayStr = new Date().toISOString().slice(0, 10);
+              const isToday = dateStr === todayStr;
+              return (
+                <div key={dateStr} className={`bg-stone-900 min-h-16 p-1 ${isToday ? 'ring-1 ring-inset ring-stone-500' : ''}`}>
+                  <p className={`text-xs mb-1 ${isToday ? 'text-stone-200 font-semibold' : 'text-stone-600'}`}>{day}</p>
+                  {dayReels.map(r => (
+                    <div key={r.id} className={`text-xs rounded px-1 py-0.5 mb-0.5 truncate ${KIND_COLOR[r.kind] ?? 'text-stone-400'} bg-stone-800`} title={r.theme ?? ''}>
+                      {KIND_LABEL[r.kind]} {r.theme ? r.theme.slice(0, 8) : ''}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Board() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [doneTasks, setDoneTasks] = useState<Task[]>([]);
@@ -179,7 +363,14 @@ export default function Board() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [showDone, setShowDone] = useState(false);
-  const [activeNav, setActiveNav] = useState<'tasks' | 'projects'>('tasks');
+  const [activeNav, setActiveNav] = useState<'tasks' | 'projects' | 'reels'>('tasks');
+  const [reels, setReels] = useState<Reel[]>([]);
+  const [reelsView, setReelsView] = useState<'kanban' | 'calendar'>('kanban');
+  const [reelMonth, setReelMonth] = useState(() => new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [showReelForm, setShowReelForm] = useState(false);
+  const [newReelTheme, setNewReelTheme] = useState('');
+  const [newReelKind, setNewReelKind] = useState<ReelKind>('shokunin');
+  const [newReelDate, setNewReelDate] = useState('');
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'someday'>('today');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [newTitle, setNewTitle] = useState('');
@@ -202,6 +393,15 @@ export default function Board() {
       setLoading(false);
     };
     load();
+  }, []);
+
+  useEffect(() => {
+    fetch(`/api/reels`).then(r => r.json()).then(d => setReels(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
+
+  const loadReelsByMonth = useCallback(async (month: string) => {
+    const d = await fetch(`/api/reels?month=${month}`).then(r => r.json()).catch(() => []);
+    setReels(Array.isArray(d) ? d : []);
   }, []);
 
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -384,6 +584,17 @@ export default function Board() {
               </span>
             )}
           </div>
+          <div
+            onClick={() => setActiveNav('reels')}
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm cursor-pointer ${activeNav === 'reels' ? 'text-stone-100 bg-stone-700' : 'text-stone-400 hover:bg-stone-700'}`}
+          >
+            🎬 配信
+            {reels.length > 0 && (
+              <span className="ml-auto text-xs bg-stone-700 text-stone-400 px-1.5 py-0.5 rounded-full">
+                {reels.length}
+              </span>
+            )}
+          </div>
           {activeNav === 'tasks' && (
             <>
               <div className="border-t border-stone-700 mt-2 pt-2">
@@ -411,6 +622,53 @@ export default function Board() {
         <main className="flex-1 p-6 max-w-3xl">
           {loading ? (
             <p className="text-sm text-stone-600 text-center py-12">読み込み中...</p>
+          ) : activeNav === 'reels' ? (
+            <ReelsView
+              reels={reels}
+              view={reelsView}
+              month={reelMonth}
+              showForm={showReelForm}
+              newTheme={newReelTheme}
+              newKind={newReelKind}
+              newDate={newReelDate}
+              onViewChange={setReelsView}
+              onMonthChange={(m) => { setReelMonth(m); loadReelsByMonth(m); }}
+              onToggleForm={() => setShowReelForm(v => !v)}
+              onNewThemeChange={setNewReelTheme}
+              onNewKindChange={setNewReelKind}
+              onNewDateChange={setNewReelDate}
+              onAdd={async () => {
+                if (!newReelTheme.trim()) return;
+                const res = await fetch('/api/reels', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ theme: newReelTheme.trim(), kind: newReelKind, publish_date: newReelDate || null }),
+                });
+                if (res.ok) {
+                  const created: Reel = await res.json();
+                  setReels(rs => [...rs, created]);
+                  setNewReelTheme('');
+                  setNewReelDate('');
+                  setShowReelForm(false);
+                }
+              }}
+              onStatusChange={async (id, status) => {
+                const res = await fetch(`/api/reels?id=${id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ status }),
+                });
+                if (res.ok) {
+                  const updated: Reel = await res.json();
+                  setReels(rs => rs.map(r => r.id === id ? updated : r));
+                }
+              }}
+              onDelete={async (id) => {
+                if (!window.confirm('このリールを削除しますか？')) return;
+                const res = await fetch(`/api/reels?id=${id}`, { method: 'DELETE' });
+                if (res.ok) setReels(rs => rs.filter(r => r.id !== id));
+              }}
+            />
           ) : activeNav === 'projects' ? (
             <>
               {selectedProject ? (

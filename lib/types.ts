@@ -20,6 +20,27 @@ export interface Project {
   task_count_today?: number;
   task_count_upcoming?: number;
 }
+export type ReelKind = 'shokunin' | 'shashinka' | 'ldl';
+export type ReelStatus = '下書き' | '収録待ち' | '撮影済み' | '編集待ち' | '予約済み' | '投稿済み' | '削除予定';
+
+export interface Reel {
+  id: string;
+  kind: ReelKind;
+  theme?: string | null;
+  status: ReelStatus;
+  publish_date?: string | null;
+  request_date?: string | null;
+  memo?: string | null;
+  koyomi_meta?: string | null;
+  chatgpt_url?: string | null;
+  script?: string | null;
+  caption?: string | null;
+  extra?: Record<string, unknown> | null;
+  created_at: string;
+  posted_at?: string | null;
+  notion_id?: string | null;
+}
+
 export type TaskPriority = 'high' | 'medium' | 'low';
 export type TaskSource = 'manual' | 'webhook_line' | 'webhook_slack' | 'derived';
 export type TaskCategory = 'photo' | 'soudan' | 'myozenji' | 'u3lab' | 'sns' | 'other';
