@@ -12,7 +12,7 @@ export async function GET() {
     { data: doneTasks, error: dtErr },
     { data: logs, error: logErr },
   ] = await Promise.all([
-    db.from('projects').select('*').order('created_at', { ascending: false }),
+    db.from('projects').select('*').order('last_updated', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false }),
     db.from('tasks')
       .select('project_id, status, due_date')
       .not('project_id', 'is', null)
@@ -25,8 +25,8 @@ export async function GET() {
       .limit(200),
     db.from('project_log')
       .select('*')
-      .order('log_date', { ascending: true })
-      .order('created_at', { ascending: true })
+      .order('log_date', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(500),
   ]);
 
