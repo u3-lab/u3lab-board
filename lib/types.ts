@@ -17,6 +17,7 @@ export interface Project {
   provenance?: string | null;
   summary?: string | null;
   created_at: string;
+  no?: number | null;
   // joined fields (from API)
   task_count_today?: number;
   task_count_upcoming?: number;

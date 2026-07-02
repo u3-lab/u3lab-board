@@ -160,7 +160,10 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
       className="border border-stone-700 rounded-lg p-4 hover:border-stone-500 cursor-pointer transition-colors bg-stone-800/50"
     >
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <p className="text-sm font-medium text-stone-100 leading-snug">{project.name}</p>
+        <p className="text-sm font-medium text-stone-100 leading-snug">
+          {project.no != null && <span className="text-stone-500 mr-1">No.{project.no}</span>}
+          {project.name}
+        </p>
         <span className={`text-xs flex-shrink-0 font-medium ${PROJECT_STATUS_COLOR[project.status]}`}>
           {PROJECT_STATUS_LABEL[project.status]}
         </span>
@@ -777,7 +780,10 @@ export default function Board() {
                   {/* ヘッダー */}
                   <div className="border border-stone-700 rounded-lg p-5 mb-5">
                     <div className="flex items-start justify-between gap-3 mb-2">
-                      <h2 className="text-base font-semibold text-stone-100">{selectedProject.name}</h2>
+                      <h2 className="text-base font-semibold text-stone-100">
+                        {selectedProject.no != null && <span className="text-stone-500 mr-1.5">No.{selectedProject.no}</span>}
+                        {selectedProject.name}
+                      </h2>
                       <span className={`text-xs font-medium flex-shrink-0 ${PROJECT_STATUS_COLOR[selectedProject.status]}`}>
                         {PROJECT_STATUS_LABEL[selectedProject.status]}
                       </span>
