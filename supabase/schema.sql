@@ -116,6 +116,20 @@ CREATE TABLE projects (
 
 CREATE UNIQUE INDEX projects_no_uidx ON projects (no) WHERE no IS NOT NULL;
 
+-- No.（通し番号）は一度振ったら不変。新規プロジェクトは自動でmax+1を採番。
+CREATE OR REPLACE FUNCTION assign_project_no() RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.no IS NULL THEN
+    NEW.no := (SELECT COALESCE(MAX(no), 0) + 1 FROM projects);
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_assign_project_no
+  BEFORE INSERT ON projects
+  FOR EACH ROW EXECUTE FUNCTION assign_project_no();
+
 -- RLS: 現在無効（service_role/APIルート経由のみで運用中）
 
 -- Project log table (プロジェクトごとの活動ログ・中粒度)
