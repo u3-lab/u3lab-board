@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
-import type { TaskCategory, TaskPriority, TaskSource } from '@/lib/types';
+import type { TaskCategory, TaskPriority, TaskSource, TaskStatus } from '@/lib/types';
+
+const VALID_STATUSES: TaskStatus[] = ['today', 'in_progress', 'waiting', 'done', 'someday'];
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET ?? '';
 
@@ -30,7 +32,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { title, source, memo, assignee, category: categoryOverride, priority: priorityOverride, permalink, source_ref } = body as {
+  const { title, source, memo, assignee, category: categoryOverride, priority: priorityOverride, permalink, source_ref, status, due_date } = body as {
     title: string;
     source: TaskSource;
     memo?: string;
@@ -39,10 +41,16 @@ export async function POST(req: NextRequest) {
     priority?: TaskPriority;
     permalink?: string;
     source_ref?: string;
+    status?: TaskStatus;
+    due_date?: string;
   };
 
   if (!title || !source) {
     return NextResponse.json({ error: 'title and source are required' }, { status: 400 });
+  }
+
+  if (status && !VALID_STATUSES.includes(status)) {
+    return NextResponse.json({ error: `status must be one of: ${VALID_STATUSES.join(', ')}` }, { status: 400 });
   }
 
   const triaged = triage(`${title} ${memo ?? ''}`);
@@ -52,7 +60,7 @@ export async function POST(req: NextRequest) {
   const db = supabaseAdmin();
   const { data, error } = await db.from('tasks').insert([{
     title,
-    status: 'waiting',
+    status: status ?? 'waiting',
     priority,
     source,
     category,
@@ -60,6 +68,7 @@ export async function POST(req: NextRequest) {
     permalink: permalink ?? null,
     source_ref: source_ref ?? null,
     assignee: assignee ?? 'yuuki',
+    due_date: due_date ?? null,
   }]).select().single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
