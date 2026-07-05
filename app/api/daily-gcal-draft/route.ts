@@ -72,9 +72,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  // today in JST
+  // 対象日: ?date=YYYY-MM-DD が指定されればそれ（backfill用）、無ければ today in JST（通常の夜間バッチ）
+  const dateParam = req.nextUrl.searchParams.get('date');
+  if (dateParam && !/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+    return NextResponse.json({ error: 'invalid date param, expected YYYY-MM-DD' }, { status: 400 });
+  }
   const nowJst = new Date(Date.now() + 9 * 3600 * 1000);
-  const todayStr = nowJst.toISOString().slice(0, 10);
+  const todayStr = dateParam ?? nowJst.toISOString().slice(0, 10);
 
   const db = supabaseAdmin();
   const { data: tasks, error } = await db
