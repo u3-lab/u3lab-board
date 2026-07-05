@@ -38,6 +38,12 @@ async function ensureShared(
     const code = (e as { code?: number })?.code;
     if (code !== 409) throw e;
   }
+
+  // 新規作成直後はデフォルトTZがUTCになるため Asia/Tokyo に揃える（実害は無いが表示が素直になる）
+  await calendar.calendars.patch({
+    calendarId,
+    requestBody: { timeZone: 'Asia/Tokyo' },
+  });
 }
 
 async function getOrCreateDraftCalendarId(auth: ReturnType<typeof getAuth>): Promise<string> {
