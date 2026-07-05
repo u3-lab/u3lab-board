@@ -16,16 +16,46 @@ function getAuth() {
   });
 }
 
+const DRAFT_CALENDAR_SHARE_WITH = 'hrd.yuk@gmail.com';
+
+// 新規作成したカレンダーはサービスアカウント自身の中にしか存在しないため、
+// 祐紀さんのアカウントへ共有しないと永遠に見えない（2026-07-06 発見・修正）。
+// 既存カレンダーに対しても毎回呼ぶ（過去に孤立作成された分も含めて冪等に共有し直す）。
+// 既に共有済みの場合 acl.insert は 409 を返すので握り潰す。
+async function ensureShared(
+  calendar: ReturnType<typeof google.calendar>,
+  calendarId: string
+): Promise<void> {
+  try {
+    await calendar.acl.insert({
+      calendarId,
+      requestBody: {
+        role: 'writer',
+        scope: { type: 'user', value: DRAFT_CALENDAR_SHARE_WITH },
+      },
+    });
+  } catch (e: unknown) {
+    const code = (e as { code?: number })?.code;
+    if (code !== 409) throw e;
+  }
+}
+
 async function getOrCreateDraftCalendarId(auth: ReturnType<typeof getAuth>): Promise<string> {
   const calendar = google.calendar({ version: 'v3', auth });
   const list = await calendar.calendarList.list();
   const existing = list.data.items?.find(c => c.summary === DRAFT_CALENDAR_NAME);
-  if (existing?.id) return existing.id;
+  if (existing?.id) {
+    await ensureShared(calendar, existing.id);
+    return existing.id;
+  }
 
   const created = await calendar.calendars.insert({
     requestBody: { summary: DRAFT_CALENDAR_NAME },
   });
-  return created.data.id!;
+  const calendarId = created.data.id!;
+  await ensureShared(calendar, calendarId);
+
+  return calendarId;
 }
 
 // POST /api/daily-gcal-draft  — called by task scheduler at 23:00 JST
