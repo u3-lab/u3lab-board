@@ -35,14 +35,19 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(data, { status: 201 });
 }
 
-// PATCH /api/reels?id=xxx
+// PATCH /api/reels?id=xxx  または  PATCH /api/reels?notion_id=xxx
+// notion_id指定を許可しているのは、Notion側を直接編集する運用（光）が
+// Supabase側のUUIDを都度引く手間なく同じ操作で二重書きできるようにするため（2026-07-06）。
 export async function PATCH(req: NextRequest) {
-  const id = new URL(req.url).searchParams.get('id');
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get('id');
+  const notionId = searchParams.get('notion_id');
+  if (!id && !notionId) return NextResponse.json({ error: 'id or notion_id required' }, { status: 400 });
 
   const body: Partial<Reel> = await req.json();
   const db = supabaseAdmin();
-  const { data, error } = await db.from('reels').update(body).eq('id', id).select().single();
+  const query = db.from('reels').update(body);
+  const { data, error } = await (id ? query.eq('id', id) : query.eq('notion_id', notionId!)).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }
