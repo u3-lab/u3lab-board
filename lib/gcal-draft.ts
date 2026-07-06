@@ -97,3 +97,17 @@ export async function writeTaskToDraftCalendar(task: Task): Promise<string | nul
 
   return event.data.id ?? null;
 }
+
+// 完了取り消し(undo)・タスク削除時に対応するカレンダーイベントを削除する。
+// 既に消えている(404/410)場合は冪等に無視する。
+export async function deleteDraftCalendarEvent(gcalEventId: string): Promise<void> {
+  const auth = getGcalAuth();
+  const calendarId = await getOrCreateDraftCalendarId(auth);
+  const calendar = google.calendar({ version: 'v3', auth });
+  try {
+    await calendar.events.delete({ calendarId, eventId: gcalEventId });
+  } catch (e: unknown) {
+    const code = (e as { code?: number })?.code;
+    if (code !== 404 && code !== 410) throw e;
+  }
+}

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { Task } from '@/lib/types';
-import { writeTaskToDraftCalendar } from '@/lib/gcal-draft';
+import { writeTaskToDraftCalendar, deleteDraftCalendarEvent } from '@/lib/gcal-draft';
 
 // GET /api/tasks                    → non-archived tasks
 // GET /api/tasks?completed_today=true → today's done tasks (JST)
@@ -81,6 +81,17 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // undo（完了取り消し）時：保存済みイベントがあれば削除してgcal_event_idをクリア（冪等・失敗しても継続）
+  if (body.status && body.status !== 'done' && data && data.gcal_event_id) {
+    try {
+      await deleteDraftCalendarEvent(data.gcal_event_id);
+      await db.from('tasks').update({ gcal_event_id: null }).eq('id', id);
+      data.gcal_event_id = null;
+    } catch (e) {
+      console.error('gcal draft event delete failed (non-fatal):', e);
+    }
+  }
+
   return NextResponse.json(data);
 }
 
@@ -90,7 +101,17 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
   const db = supabaseAdmin();
-  const { error } = await db.from('tasks').delete().eq('id', id);
+  const { data, error } = await db.from('tasks').delete().eq('id', id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // 削除されたタスクに対応するカレンダーイベントがあれば一緒に削除（非fatal・タスク削除自体は既に完了済み）
+  if (data?.gcal_event_id) {
+    try {
+      await deleteDraftCalendarEvent(data.gcal_event_id);
+    } catch (e) {
+      console.error('gcal draft event delete failed on task delete (non-fatal, orphaned event may remain):', e);
+    }
+  }
+
   return NextResponse.json({ deleted: id });
 }
