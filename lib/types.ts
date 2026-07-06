@@ -77,4 +77,5 @@ export interface Task {
   archived_at?: string | null;
   agent_id?: string | null;
   project_id?: string | null;
+  gcal_event_id?: string | null;
 }
