@@ -190,6 +190,17 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
 
 const KIND_LABEL: Record<string, string> = { shokunin: '住職', shashinka: '写真家', ldl: 'LDL', kokoro: 'こころをうつす', other: 'その他' };
 const KIND_COLOR: Record<string, string> = { shokunin: 'text-amber-400', shashinka: 'text-sky-400', ldl: 'text-emerald-400', kokoro: 'text-pink-400', other: 'text-stone-400' };
+// アカウント別カード色分け（surge の getCardColor(accountId) 相当・ステータス非依存・ダーク配色に翻案）
+const KIND_ACCENT_BORDER: Record<string, string> = {
+  shokunin: 'border-l-amber-500', shashinka: 'border-l-sky-500', ldl: 'border-l-emerald-500', kokoro: 'border-l-pink-500', other: 'border-l-stone-500',
+};
+const ACCOUNT_CARD_STYLE: Record<string, string> = {
+  shokunin: `border-l-4 ${KIND_ACCENT_BORDER.shokunin} bg-amber-950/20`,
+  shashinka: `border-l-4 ${KIND_ACCENT_BORDER.shashinka} bg-sky-950/20`,
+  ldl: `border-l-4 ${KIND_ACCENT_BORDER.ldl} bg-emerald-950/20`,
+  kokoro: `border-l-4 ${KIND_ACCENT_BORDER.kokoro} bg-pink-950/20`,
+  other: `border-l-4 ${KIND_ACCENT_BORDER.other} bg-stone-800`,
+};
 const REEL_STATUS_ORDER: ReelStatus[] = ['下書き', '収録待ち', '撮影済み', '予約済み', '投稿済み', '削除予定'];
 const REEL_STATUS_COLOR: Record<ReelStatus, string> = {
   '下書き': 'border-stone-600 text-stone-400',
@@ -217,6 +228,34 @@ function CopyButton({ text, label = 'コピー' }: { text: string | null | undef
   );
 }
 
+// ステータス連動クイックコピー（surgeの copyScript/copyCaption を移植）。
+// 収録待ち=タイトル+本文をコピー、撮影済み=キャプション単体をコピー、それ以外は出さない。
+// quickPublish（予約済み→投稿済みのワンクリック）は移植しない——今日の暴発防止ガード
+// およびIG-Monitor④の実IG確認込み自動flipと衝突するため（海判断・2026-07-10）。
+function quickCopyFor(reel: Reel): { label: string; text: string } | null {
+  if (reel.status === '収録待ち' && reel.script) return { label: 'シナリオをコピー', text: `${reel.theme ?? ''}\n\n${reel.script}` };
+  if (reel.status === '撮影済み' && reel.caption) return { label: 'キャプションをコピー', text: reel.caption };
+  return null;
+}
+
+function QuickCopyButton({ label, text }: { label: string; text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={async e => {
+        e.stopPropagation();
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      title={label}
+      className={`w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-lg transition-colors ${copied ? 'text-green-400' : 'text-stone-500 hover:text-stone-200 hover:bg-stone-700'}`}
+    >
+      {copied ? '✓' : '📋'}
+    </button>
+  );
+}
+
 function ReelCard({ reel, onStatusChange, onDelete, onOpen }: {
   reel: Reel;
   onStatusChange: (id: string, status: ReelStatus) => void;
@@ -225,8 +264,9 @@ function ReelCard({ reel, onStatusChange, onDelete, onOpen }: {
 }) {
   const currentIdx = REEL_STATUS_ORDER.indexOf(reel.status);
   const nextStatus = currentIdx < REEL_STATUS_ORDER.length - 2 ? REEL_STATUS_ORDER[currentIdx + 1] : null;
+  const quickCopy = quickCopyFor(reel);
   return (
-    <div className="bg-stone-800 border border-stone-700 rounded-lg p-3 text-xs group/card cursor-pointer hover:border-stone-500" onClick={() => onOpen(reel)}>
+    <div className={`rounded-lg p-3 text-xs group/card cursor-pointer hover:brightness-125 transition-[filter] ${ACCOUNT_CARD_STYLE[reel.kind] ?? ACCOUNT_CARD_STYLE.other}`} onClick={() => onOpen(reel)}>
       <div className="flex items-start justify-between gap-1 mb-1.5">
         <span className={`font-medium text-xs ${KIND_COLOR[reel.kind] ?? 'text-stone-400'}`}>{KIND_LABEL[reel.kind] ?? reel.kind}</span>
         <button onClick={e => { e.stopPropagation(); onDelete(reel.id); }} className="opacity-0 group-hover/card:opacity-100 text-stone-700 hover:text-red-500 transition-colors leading-none">×</button>
@@ -236,15 +276,18 @@ function ReelCard({ reel, onStatusChange, onDelete, onOpen }: {
       {reel.memo && <p className="text-stone-600 truncate mb-2">{reel.memo}</p>}
       <div className="flex items-center justify-between gap-2">
         <span className={`border rounded px-1.5 py-0.5 text-xs ${REEL_STATUS_COLOR[reel.status]}`}>{reel.status}</span>
-        {nextStatus && (
-          <button
-            onClick={e => { e.stopPropagation(); onStatusChange(reel.id, nextStatus); }}
-            className="text-xs text-stone-600 hover:text-stone-300 transition-colors"
-            title={`→ ${nextStatus}`}
-          >
-            → {nextStatus}
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {nextStatus && (
+            <button
+              onClick={e => { e.stopPropagation(); onStatusChange(reel.id, nextStatus); }}
+              className="text-xs text-stone-600 hover:text-stone-300 transition-colors"
+              title={`→ ${nextStatus}`}
+            >
+              → {nextStatus}
+            </button>
+          )}
+          {quickCopy && <QuickCopyButton label={quickCopy.label} text={quickCopy.text} />}
+        </div>
       </div>
     </div>
   );
@@ -304,7 +347,7 @@ function ReelDetailPanel({ reel, onClose, onSave, onDelete }: {
           className="text-sm border border-stone-600 rounded px-3 py-1.5 bg-stone-700 text-stone-100 placeholder-stone-500 outline-none focus:border-stone-400"
         />
 
-        <div className="flex gap-2 flex-wrap">
+        <div className={`flex gap-2 flex-wrap pl-3 border-l-4 ${KIND_ACCENT_BORDER[form.kind] ?? KIND_ACCENT_BORDER.other}`}>
           <select value={form.kind} onChange={e => set('kind', e.target.value as ReelKind)} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200">
             {Object.entries(KIND_LABEL).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
           </select>

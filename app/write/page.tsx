@@ -8,6 +8,10 @@ import type { Reel, ReelKind } from '@/lib/types';
 // 「ボードへ送る」を押すまでboard reelsには一切書き込まない。
 
 const KIND_LABEL: Record<ReelKind, string> = { shokunin: '住職', shashinka: '写真家', ldl: 'LDL', kokoro: 'こころをうつす', other: 'その他' };
+// アカウント別アクセント色（ボードのカード色分けと揃える）
+const KIND_ACCENT: Record<ReelKind, string> = {
+  shokunin: 'border-l-amber-500', shashinka: 'border-l-sky-500', ldl: 'border-l-emerald-500', kokoro: 'border-l-pink-500', other: 'border-l-stone-500',
+};
 
 type ReadbackResult = { ok: boolean; mismatches: string[] };
 
@@ -84,7 +88,7 @@ export default function WritePage() {
           <p className="text-xs text-stone-500 mt-1">ここは書くための場所です。書き終えたら「ボードへ送る」を押してください（それまでボードには反映されません）</p>
         </div>
 
-        <div className="flex gap-2 flex-wrap">
+        <div className={`flex gap-2 flex-wrap pl-3 border-l-4 ${KIND_ACCENT[kind]}`}>
           <select value={kind} onChange={e => setKind(e.target.value as ReelKind)} className="text-sm border border-stone-600 rounded px-3 py-2 bg-stone-800 text-stone-200">
             {Object.entries(KIND_LABEL).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
           </select>
