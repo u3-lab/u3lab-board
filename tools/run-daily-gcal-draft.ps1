@@ -1,10 +1,12 @@
 # 毎日 23:00 JST に実行される日次バッチ — タスクスケジューラーから呼び出し
-$secret = (Get-Content "$PSScriptRoot\..\..\..\saku\.env" | Where-Object { $_ -match '^CRON_SECRET=' } | ForEach-Object { ($_ -split '=',2)[1].Trim() })
+$envLines = Get-Content "$PSScriptRoot\..\..\..\saku\.env"
+$secret = ($envLines | Where-Object { $_ -match '^CRON_SECRET=' } | ForEach-Object { ($_ -split '=',2)[1].Trim() })
+$bypassSecret = ($envLines | Where-Object { $_ -match '^VERCEL_PROTECTION_BYPASS_SECRET=' } | ForEach-Object { ($_ -split '=',2)[1].Trim() })
 $url = "https://u3lab-board.vercel.app/api/daily-gcal-draft"
 
 try {
   $res = Invoke-RestMethod -Uri $url -Method POST `
-    -Headers @{ Authorization = "Bearer $secret"; "Content-Type" = "application/json" } `
+    -Headers @{ Authorization = "Bearer $secret"; "Content-Type" = "application/json"; "x-vercel-protection-bypass" = $bypassSecret } `
     -Body "{}" `
     -ErrorAction Stop
 
