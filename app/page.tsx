@@ -591,6 +591,12 @@ export default function Board() {
   const [showAdd, setShowAdd] = useState(false);
   const [showDone, setShowDone] = useState(false);
   const [activeNav, setActiveNav] = useState<'tasks' | 'projects' | 'reels'>('tasks');
+
+  // ?tab=reels などでの深いリンク（レビュー用URL共有のため・2026-07-10）
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    if (tab === 'reels' || tab === 'projects' || tab === 'tasks') setActiveNav(tab);
+  }, []);
   const [reels, setReels] = useState<Reel[]>([]);
   const [reelsView, setReelsView] = useState<'alert' | 'kanban' | 'calendar'>('alert');
   const [reelMonth, setReelMonth] = useState(() => new Date().toISOString().slice(0, 7)); // YYYY-MM
