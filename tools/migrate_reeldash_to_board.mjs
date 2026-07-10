@@ -105,35 +105,43 @@ async function main() {
       // just backfill source_ref so we know it's linked (§3-5 step 7).
       const { data: existingBySourceRef } = await db.from('reels').select('*').eq('source_ref', reel.source_ref).maybeSingle();
 
-      let written;
+      // Fields actually written this iteration -- read-back must only check these.
+      // A source_ref-only backfill onto an existing Notion row deliberately leaves
+      // that row's script/caption/status untouched, so checking the full `reel`
+      // object against it is a guaranteed false positive (2026-07-10 incident).
+      let written, writtenFields;
       if (existingBySourceRef) {
         const { data, error } = await db.from('reels').update(reel).eq('id', existingBySourceRef.id).select().single();
         if (error) throw error;
         written = data;
+        writtenFields = reel;
         results.updated++;
       } else {
         const { data: dup } = await db.from('reels')
           .select('*').eq('theme', reel.theme).eq('publish_date', reel.publish_date).is('source_ref', null).maybeSingle();
         if (dup) {
-          const { data, error } = await db.from('reels').update({ source_ref: reel.source_ref }).eq('id', dup.id).select().single();
+          const patch = { source_ref: reel.source_ref };
+          const { data, error } = await db.from('reels').update(patch).eq('id', dup.id).select().single();
           if (error) throw error;
           written = data;
+          writtenFields = patch;
           results.updated++;
         } else {
           const { data, error } = await db.from('reels').insert([reel]).select().single();
           if (error) throw error;
           written = data;
+          writtenFields = reel;
           results.inserted++;
         }
       }
 
-      // Read-back: re-fetch and full-text compare the fields we just wrote (光の絶対条件).
+      // Read-back: re-fetch and full-text compare only the fields we just wrote (光の絶対条件).
       const { data: readback, error: rbErr } = await db.from('reels').select('*').eq('id', written.id).single();
       if (rbErr) throw rbErr;
-      for (const field of ['theme', 'script', 'caption', 'status', 'publish_date']) {
-        if ((readback[field] ?? null) !== (reel[field] ?? null)) {
+      for (const field of Object.keys(writtenFields)) {
+        if ((readback[field] ?? null) !== (writtenFields[field] ?? null)) {
           results.readback_mismatch++;
-          failures.push({ source_ref: reel.source_ref, field, expected: reel[field], actual: readback[field] });
+          failures.push({ source_ref: reel.source_ref, field, expected: writtenFields[field], actual: readback[field] });
           console.error(`[READBACK MISMATCH] ${reel.source_ref} field=${field}`);
         }
       }
