@@ -416,10 +416,16 @@ function ReelsView({
   onDelete: (id: string) => void;
   onOpen: (reel: Reel) => void;
 }) {
-  // 登録前の重複検索（テーマ＋公開日、光が毎回手作業でやっていた確認をUIに組込）
-  const duplicateOf = (theme: string, date: string) =>
-    reels.find(r => r.theme?.trim() === theme.trim() && r.publish_date === (date || null));
-  const pendingDuplicate = newTheme.trim() ? duplicateOf(newTheme, newDate) : undefined;
+  // 登録前の重複検索（テーマ名ベースのゆるい一致が主・光の実運用に合わせる。
+  // リスケ/別日出し直しで公開日が変わっているケースも拾うため、テーマ一致を優先し、
+  // 公開日も一致する場合はより強い警告にする二段構成）
+  const duplicatesByTheme = (theme: string) =>
+    reels.filter(r => r.theme?.trim().toLowerCase() === theme.trim().toLowerCase());
+  const themeMatches = newTheme.trim() ? duplicatesByTheme(newTheme) : [];
+  const exactDateMatch = themeMatches.find(r => r.publish_date === (newDate || null));
+  const pendingDuplicate = exactDateMatch ?? themeMatches[0];
+  const isStrongDuplicate = Boolean(exactDateMatch);
+  const [kanbanNearOnly, setKanbanNearOnly] = useState(true);
   const [y, m] = month.split('-').map(Number);
   const prevMonth = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
   const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
@@ -460,6 +466,15 @@ function ReelsView({
           <button onClick={() => onViewChange('kanban')} className={`px-3 py-1 text-xs transition-colors ${view === 'kanban' ? 'bg-stone-700 text-stone-100' : 'text-stone-500 hover:text-stone-300'}`}>かんばん</button>
           <button onClick={() => onViewChange('calendar')} className={`px-3 py-1 text-xs transition-colors ${view === 'calendar' ? 'bg-stone-700 text-stone-100' : 'text-stone-500 hover:text-stone-300'}`}>カレンダー</button>
         </div>
+        {view === 'kanban' && (
+          <button
+            onClick={() => setKanbanNearOnly(v => !v)}
+            className={`text-xs px-2 py-1 rounded border transition-colors ${kanbanNearOnly ? 'border-stone-500 text-stone-200' : 'border-stone-700 text-stone-500 hover:text-stone-300'}`}
+            title="配信日が近いもの・未設定のみ表示（それ以外の先の予定は隠す）"
+          >
+            {kanbanNearOnly ? '📅 近日のみ表示中' : '📅 全件表示中'}
+          </button>
+        )}
         <div className="flex-1" />
         <button onClick={onToggleForm} className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white">+ リール追加</button>
       </div>
@@ -481,13 +496,25 @@ function ReelsView({
             </select>
             <input type="date" value={newDate} onChange={e => onNewDateChange(e.target.value)} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200 outline-none focus:border-stone-400" />
             <button
-              onClick={() => { if (pendingDuplicate && !window.confirm(`同じテーマ・公開日のリールが既にあります（${KIND_LABEL[pendingDuplicate.kind]}・${pendingDuplicate.status}）。それでも追加しますか？`)) return; onAdd(); }}
+              onClick={() => {
+                if (pendingDuplicate) {
+                  const msg = isStrongDuplicate
+                    ? `同じテーマ・同じ公開日のリールが既にあります（${KIND_LABEL[pendingDuplicate.kind]}・${pendingDuplicate.status}）。それでも追加しますか？`
+                    : `同じテーマ名のリールが既にあります（${KIND_LABEL[pendingDuplicate.kind]}・${pendingDuplicate.status}・公開日 ${pendingDuplicate.publish_date ?? '未設定'}）。リスケ/出し直しでなければ確認してください。それでも追加しますか？`;
+                  if (!window.confirm(msg)) return;
+                }
+                onAdd();
+              }}
               className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white"
             >追加</button>
             <button onClick={onToggleForm} className="text-xs text-stone-400 hover:text-stone-200">キャンセル</button>
           </div>
           {pendingDuplicate && (
-            <p className="text-xs text-yellow-500">⚠ 重複の可能性：同じテーマ・公開日のリールが既にあります（{KIND_LABEL[pendingDuplicate.kind]}・{pendingDuplicate.status}）</p>
+            isStrongDuplicate ? (
+              <p className="text-xs text-red-400">⚠ 重複の可能性（強）：同じテーマ・同じ公開日のリールが既にあります（{KIND_LABEL[pendingDuplicate.kind]}・{pendingDuplicate.status}）</p>
+            ) : (
+              <p className="text-xs text-yellow-500">⚠ 同じテーマ名のリールが既にあります（{KIND_LABEL[pendingDuplicate.kind]}・{pendingDuplicate.status}・公開日 {pendingDuplicate.publish_date ?? '未設定'}）。リスケ/出し直しか確認してください</p>
+            )
           )}
         </div>
       )}
@@ -503,7 +530,8 @@ function ReelsView({
             <p className="text-sm text-stone-600 py-8 text-center">要確認なし 🎉</p>
           ) : (
             <div className="flex flex-col gap-2">
-              <p className="text-xs text-stone-500 mb-2">過去日 × 未投稿（{alertReels.length}件）— 配信済みなら「投稿済みにする」を押してください</p>
+              <p className="text-xs text-stone-500 mb-1">過去日 × 未投稿（{alertReels.length}件）— 配信済みなら「投稿済みにする」を押してください</p>
+              <p className="text-xs text-yellow-500 mb-2">⚠ 配信日が過ぎているだけでは押さないこと。実機（IG等）か祐紀さんへの確認で、実際に投稿されたことを確かめてから押してください</p>
               {alertReels.map(r => (
                 <div key={r.id} className="bg-stone-800 border border-red-900/50 rounded-lg p-3 flex items-start gap-3">
                   <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onOpen(r)}>
@@ -516,7 +544,10 @@ function ReelsView({
                   </div>
                   <div className="flex flex-col gap-1 flex-shrink-0">
                     <button
-                      onClick={() => onStatusChange(r.id, '投稿済み')}
+                      onClick={() => {
+                        if (!window.confirm(`「${r.theme ?? '(テーマ未設定)'}」を投稿済みにします。\n\n配信日が過ぎているだけでなく、実機（IG等）か祐紀さんへの確認で実際に投稿されたことを確認済みですか？`)) return;
+                        onStatusChange(r.id, '投稿済み');
+                      }}
                       className="text-xs px-2 py-1 bg-stone-700 text-stone-200 rounded hover:bg-green-900/50 hover:text-green-300 transition-colors whitespace-nowrap"
                     >✓ 投稿済みにする</button>
                     <button
@@ -534,18 +565,35 @@ function ReelsView({
       {/* kanban view */}
       {view === 'kanban' && reels.length > 0 && (
         <div className="grid grid-cols-1 gap-6">
-          {REEL_STATUS_ORDER.filter(s => reels.some(r => r.status === s)).map(status => (
-            <div key={status}>
-              <h3 className={`text-xs font-semibold uppercase tracking-wider mb-2 ${REEL_STATUS_COLOR[status]}`}>
-                {status} ({reels.filter(r => r.status === status).length})
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {reels.filter(r => r.status === status).map(r => (
-                  <ReelCard key={r.id} reel={r} onStatusChange={onStatusChange} onDelete={onDelete} onOpen={onOpen} />
-                ))}
+          {REEL_STATUS_ORDER.filter(s => reels.some(r => r.status === s)).map(status => {
+            const NEAR_PAST_DAYS = 7;
+            const NEAR_FUTURE_DAYS = 21;
+            const nearStart = new Date(Date.now() + (9 - NEAR_PAST_DAYS * 24) * 3600 * 1000).toISOString().slice(0, 10);
+            const nearEnd = new Date(Date.now() + (9 + NEAR_FUTURE_DAYS * 24) * 3600 * 1000).toISOString().slice(0, 10);
+
+            const columnReels = reels
+              .filter(r => r.status === status)
+              .filter(r => !kanbanNearOnly || (r.publish_date && r.publish_date >= nearStart && r.publish_date <= nearEnd))
+              .sort((a, b) => (a.publish_date ?? '9999') < (b.publish_date ?? '9999') ? -1 : 1);
+            const totalInStatus = reels.filter(r => r.status === status).length;
+
+            return (
+              <div key={status}>
+                <h3 className={`text-xs font-semibold uppercase tracking-wider mb-2 ${REEL_STATUS_COLOR[status]}`}>
+                  {status} ({columnReels.length}{kanbanNearOnly && columnReels.length !== totalInStatus ? ` / 全${totalInStatus}` : ''})
+                </h3>
+                {columnReels.length === 0 ? (
+                  <p className="text-xs text-stone-600">（近日の配信予定なし）</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {columnReels.map(r => (
+                      <ReelCard key={r.id} reel={r} onStatusChange={onStatusChange} onDelete={onDelete} onOpen={onOpen} />
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
