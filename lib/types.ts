@@ -34,14 +34,16 @@ export interface ProjectLog {
   entry_type: 'progress' | 'milestone_done';
   created_at: string;
 }
-export type ReelKind = 'shokunin' | 'shashinka' | 'ldl';
-export type ReelStatus = '下書き' | '収録待ち' | '収録済み' | '撮影済み' | '編集待ち' | '予約済み' | '投稿済み' | '削除予定';
+export type ReelKind = 'shokunin' | 'shashinka' | 'ldl' | 'kokoro' | 'other';
+export type ReelStatus = '下書き' | '収録待ち' | '撮影済み' | '予約済み' | '投稿済み' | '削除予定';
+export type ReelStage = 'idea' | 'writing' | 'production';
 
 export interface Reel {
   id: string;
   kind: ReelKind;
   theme?: string | null;
   status: ReelStatus;
+  stage?: ReelStage | null;
   publish_date?: string | null;
   request_date?: string | null;
   memo?: string | null;
@@ -49,6 +51,8 @@ export interface Reel {
   chatgpt_url?: string | null;
   script?: string | null;
   caption?: string | null;
+  post_url?: string | null;
+  source_ref?: string | null;
   extra?: Record<string, unknown> | null;
   created_at: string;
   posted_at?: string | null;

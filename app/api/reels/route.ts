@@ -32,12 +32,21 @@ export async function POST(req: NextRequest) {
   const db = supabaseAdmin();
   const { data, error } = await db.from('reels').insert([body]).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data, { status: 201 });
+
+  const { data: readback, error: rbErr } = await db.from('reels').select('*').eq('id', data.id).single();
+  const mismatches = rbErr
+    ? [{ field: '_fetch', expected: null, actual: null }]
+    : Object.keys(body).filter(field => (readback as Record<string, unknown>)[field] !== (body as Record<string, unknown>)[field]);
+
+  return NextResponse.json({ ...data, _readback: { ok: mismatches.length === 0, mismatches } }, { status: 201 });
 }
 
 // PATCH /api/reels?id=xxx  または  PATCH /api/reels?notion_id=xxx
 // notion_id指定を許可しているのは、Notion側を直接編集する運用（光）が
 // Supabase側のUUIDを都度引く手間なく同じ操作で二重書きできるようにするため（2026-07-06）。
+//
+// 保存直後にread-back（再取得してフルテキスト照合）を行い、結果を _readback として
+// レスポンスに含める（光の絶対条件・字化け対策。2026-07-10 reeldash移行で標準化）。
 export async function PATCH(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
@@ -49,7 +58,13 @@ export async function PATCH(req: NextRequest) {
   const query = db.from('reels').update(body);
   const { data, error } = await (id ? query.eq('id', id) : query.eq('notion_id', notionId!)).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data);
+
+  const { data: readback, error: rbErr } = await db.from('reels').select('*').eq('id', data.id).single();
+  const mismatches = rbErr
+    ? [{ field: '_fetch', expected: null, actual: null }]
+    : Object.keys(body).filter(field => (readback as Record<string, unknown>)[field] !== (body as Record<string, unknown>)[field]);
+
+  return NextResponse.json({ ...data, _readback: { ok: mismatches.length === 0, mismatches } });
 }
 
 // DELETE /api/reels?id=xxx

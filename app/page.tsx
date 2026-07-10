@@ -188,32 +188,48 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
   );
 }
 
-const KIND_LABEL: Record<string, string> = { shokunin: '住職', shashinka: '写真家', ldl: 'LDL' };
-const KIND_COLOR: Record<string, string> = { shokunin: 'text-amber-400', shashinka: 'text-sky-400', ldl: 'text-emerald-400' };
-const REEL_STATUS_ORDER: ReelStatus[] = ['下書き', '収録待ち', '収録済み', '撮影済み', '編集待ち', '予約済み', '投稿済み', '削除予定'];
+const KIND_LABEL: Record<string, string> = { shokunin: '住職', shashinka: '写真家', ldl: 'LDL', kokoro: 'こころをうつす', other: 'その他' };
+const KIND_COLOR: Record<string, string> = { shokunin: 'text-amber-400', shashinka: 'text-sky-400', ldl: 'text-emerald-400', kokoro: 'text-pink-400', other: 'text-stone-400' };
+const REEL_STATUS_ORDER: ReelStatus[] = ['下書き', '収録待ち', '撮影済み', '予約済み', '投稿済み', '削除予定'];
 const REEL_STATUS_COLOR: Record<ReelStatus, string> = {
   '下書き': 'border-stone-600 text-stone-400',
   '収録待ち': 'border-yellow-700 text-yellow-400',
-  '収録済み': 'border-orange-700 text-orange-400',
   '撮影済み': 'border-blue-700 text-blue-400',
-  '編集待ち': 'border-purple-700 text-purple-400',
   '予約済み': 'border-green-700 text-green-400',
   '投稿済み': 'border-stone-600 text-stone-500',
   '削除予定': 'border-red-900 text-red-600',
 };
 
-function ReelCard({ reel, onStatusChange, onDelete }: {
+function CopyButton({ text, label = 'コピー' }: { text: string | null | undefined; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!text) return null;
+  return (
+    <button
+      onClick={async () => {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      className={`text-xs px-2 py-0.5 rounded border transition-colors ${copied ? 'border-green-700 text-green-400' : 'border-stone-600 text-stone-400 hover:text-stone-200 hover:border-stone-400'}`}
+    >
+      {copied ? '✓ コピーしました' : label}
+    </button>
+  );
+}
+
+function ReelCard({ reel, onStatusChange, onDelete, onOpen }: {
   reel: Reel;
   onStatusChange: (id: string, status: ReelStatus) => void;
   onDelete: (id: string) => void;
+  onOpen: (reel: Reel) => void;
 }) {
   const currentIdx = REEL_STATUS_ORDER.indexOf(reel.status);
   const nextStatus = currentIdx < REEL_STATUS_ORDER.length - 2 ? REEL_STATUS_ORDER[currentIdx + 1] : null;
   return (
-    <div className="bg-stone-800 border border-stone-700 rounded-lg p-3 text-xs group/card">
+    <div className="bg-stone-800 border border-stone-700 rounded-lg p-3 text-xs group/card cursor-pointer hover:border-stone-500" onClick={() => onOpen(reel)}>
       <div className="flex items-start justify-between gap-1 mb-1.5">
         <span className={`font-medium text-xs ${KIND_COLOR[reel.kind] ?? 'text-stone-400'}`}>{KIND_LABEL[reel.kind] ?? reel.kind}</span>
-        <button onClick={() => onDelete(reel.id)} className="opacity-0 group-hover/card:opacity-100 text-stone-700 hover:text-red-500 transition-colors leading-none">×</button>
+        <button onClick={e => { e.stopPropagation(); onDelete(reel.id); }} className="opacity-0 group-hover/card:opacity-100 text-stone-700 hover:text-red-500 transition-colors leading-none">×</button>
       </div>
       <p className="text-stone-200 text-sm leading-snug mb-2 line-clamp-2">{reel.theme ?? '(テーマ未設定)'}</p>
       {reel.publish_date && <p className="text-stone-500 mb-2">📅 {reel.publish_date}</p>}
@@ -222,7 +238,7 @@ function ReelCard({ reel, onStatusChange, onDelete }: {
         <span className={`border rounded px-1.5 py-0.5 text-xs ${REEL_STATUS_COLOR[reel.status]}`}>{reel.status}</span>
         {nextStatus && (
           <button
-            onClick={() => onStatusChange(reel.id, nextStatus)}
+            onClick={e => { e.stopPropagation(); onStatusChange(reel.id, nextStatus); }}
             className="text-xs text-stone-600 hover:text-stone-300 transition-colors"
             title={`→ ${nextStatus}`}
           >
@@ -234,12 +250,153 @@ function ReelCard({ reel, onStatusChange, onDelete }: {
   );
 }
 
+type ReadbackResult = { ok: boolean; mismatches: string[] };
+
+// リール詳細/編集パネル（surge パリティ・光の絶対条件=保存時read-back照合を標準組込）
+function ReelDetailPanel({ reel, onClose, onSave, onDelete }: {
+  reel: Reel;
+  onClose: () => void;
+  onSave: (id: string, patch: Partial<Reel>) => Promise<ReadbackResult>;
+  onDelete: (id: string) => void;
+}) {
+  const [form, setForm] = useState<Reel>(reel);
+  const [saving, setSaving] = useState(false);
+  const [readback, setReadback] = useState<ReadbackResult | null>(null);
+
+  const set = <K extends keyof Reel>(key: K, value: Reel[K]) => {
+    setForm(f => ({ ...f, [key]: value }));
+    setReadback(null);
+  };
+
+  const bulkText = [form.theme, '', form.script, '', form.caption].filter(v => v !== undefined && v !== null).join('\n');
+
+  const handleSave = async () => {
+    setSaving(true);
+    const patch: Partial<Reel> = {
+      theme: form.theme, kind: form.kind, status: form.status,
+      publish_date: form.publish_date, request_date: form.request_date,
+      script: form.script, caption: form.caption,
+      chatgpt_url: form.chatgpt_url, post_url: form.post_url, memo: form.memo,
+    };
+    const result = await onSave(reel.id, patch);
+    setReadback(result);
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-start justify-center z-50 p-4 overflow-y-auto" onClick={onClose}>
+      <div
+        className="bg-stone-800 border border-stone-700 rounded-lg p-5 w-full max-w-2xl mt-8 mb-8 flex flex-col gap-3"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm text-stone-200 font-semibold">リール編集</h2>
+          <div className="flex items-center gap-2">
+            <CopyButton text={bulkText} label="📋 一括コピー" />
+            <button onClick={onClose} className="text-stone-500 hover:text-stone-200 text-sm">✕</button>
+          </div>
+        </div>
+
+        <input
+          value={form.theme ?? ''}
+          onChange={e => set('theme', e.target.value)}
+          placeholder="テーマ・タイトル"
+          className="text-sm border border-stone-600 rounded px-3 py-1.5 bg-stone-700 text-stone-100 placeholder-stone-500 outline-none focus:border-stone-400"
+        />
+
+        <div className="flex gap-2 flex-wrap">
+          <select value={form.kind} onChange={e => set('kind', e.target.value as ReelKind)} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200">
+            {Object.entries(KIND_LABEL).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+          </select>
+          <select value={form.status} onChange={e => set('status', e.target.value as ReelStatus)} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200">
+            {REEL_STATUS_ORDER.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <label className="flex items-center gap-1 text-xs text-stone-500">
+            公開日
+            <input type="date" value={form.publish_date ?? ''} onChange={e => set('publish_date', e.target.value || null)} className="border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200 outline-none focus:border-stone-400" />
+          </label>
+          <label className="flex items-center gap-1 text-xs text-stone-500">
+            依頼日
+            <input type="date" value={form.request_date ?? ''} onChange={e => set('request_date', e.target.value || null)} className="border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200 outline-none focus:border-stone-400" />
+          </label>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs text-stone-500">本文（シナリオ）</label>
+            <CopyButton text={form.script} />
+          </div>
+          <textarea
+            value={form.script ?? ''}
+            onChange={e => set('script', e.target.value)}
+            rows={10}
+            className="w-full text-sm border border-stone-600 rounded px-3 py-2 bg-stone-700 text-stone-100 placeholder-stone-500 outline-none focus:border-stone-400 font-mono leading-relaxed"
+          />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs text-stone-500">キャプション</label>
+            <CopyButton text={form.caption} />
+          </div>
+          <textarea
+            value={form.caption ?? ''}
+            onChange={e => set('caption', e.target.value)}
+            rows={6}
+            className="w-full text-sm border border-stone-600 rounded px-3 py-2 bg-stone-700 text-stone-100 placeholder-stone-500 outline-none focus:border-stone-400 leading-relaxed"
+          />
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-stone-500">ChatGPT URL</label>
+              <CopyButton text={form.chatgpt_url} />
+            </div>
+            <input value={form.chatgpt_url ?? ''} onChange={e => set('chatgpt_url', e.target.value || null)} className="w-full text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-300 outline-none focus:border-stone-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-stone-500">投稿URL</label>
+              <CopyButton text={form.post_url} />
+            </div>
+            <input value={form.post_url ?? ''} onChange={e => set('post_url', e.target.value || null)} className="w-full text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-300 outline-none focus:border-stone-400" />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs text-stone-500 block mb-1">メモ</label>
+          <input value={form.memo ?? ''} onChange={e => set('memo', e.target.value || null)} className="w-full text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-300 outline-none focus:border-stone-400" />
+        </div>
+
+        {readback && (
+          readback.ok ? (
+            <p className="text-xs text-green-400">✓ 保存しました（read-back照合OK・字化けなし）</p>
+          ) : (
+            <p className="text-xs text-red-400">⚠ read-back照合で不一致: {readback.mismatches.join(', ')}（保存はされましたが、再確認してください）</p>
+          )
+        )}
+
+        <div className="flex items-center justify-between pt-2 border-t border-stone-700">
+          <button onClick={() => onDelete(reel.id)} className="text-xs text-stone-600 hover:text-red-400">削除</button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="text-xs px-3 py-1.5 text-stone-400 hover:text-stone-200">閉じる</button>
+            <button onClick={handleSave} disabled={saving} className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white disabled:opacity-50">
+              {saving ? '保存中...' : '保存'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ReelsView({
   reels, view, month, showForm,
   newTheme, newKind, newDate,
   onViewChange, onMonthChange, onToggleForm,
   onNewThemeChange, onNewKindChange, onNewDateChange,
-  onAdd, onStatusChange, onDelete,
+  onAdd, onStatusChange, onDelete, onOpen,
 }: {
   reels: Reel[];
   view: 'alert' | 'kanban' | 'calendar';
@@ -257,7 +414,12 @@ function ReelsView({
   onAdd: () => void;
   onStatusChange: (id: string, status: ReelStatus) => void;
   onDelete: (id: string) => void;
+  onOpen: (reel: Reel) => void;
 }) {
+  // 登録前の重複検索（テーマ＋公開日、光が毎回手作業でやっていた確認をUIに組込）
+  const duplicateOf = (theme: string, date: string) =>
+    reels.find(r => r.theme?.trim() === theme.trim() && r.publish_date === (date || null));
+  const pendingDuplicate = newTheme.trim() ? duplicateOf(newTheme, newDate) : undefined;
   const [y, m] = month.split('-').map(Number);
   const prevMonth = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
   const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
@@ -315,14 +477,18 @@ function ReelsView({
               className="flex-1 min-w-0 text-sm border border-stone-600 rounded px-3 py-1.5 bg-stone-700 text-stone-100 placeholder-stone-500 outline-none focus:border-stone-400"
             />
             <select value={newKind} onChange={e => onNewKindChange(e.target.value as ReelKind)} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200">
-              <option value="shokunin">住職</option>
-              <option value="shashinka">写真家</option>
-              <option value="ldl">LDL</option>
+              {Object.entries(KIND_LABEL).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
             </select>
             <input type="date" value={newDate} onChange={e => onNewDateChange(e.target.value)} className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200 outline-none focus:border-stone-400" />
-            <button onClick={onAdd} className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white">追加</button>
+            <button
+              onClick={() => { if (pendingDuplicate && !window.confirm(`同じテーマ・公開日のリールが既にあります（${KIND_LABEL[pendingDuplicate.kind]}・${pendingDuplicate.status}）。それでも追加しますか？`)) return; onAdd(); }}
+              className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white"
+            >追加</button>
             <button onClick={onToggleForm} className="text-xs text-stone-400 hover:text-stone-200">キャンセル</button>
           </div>
+          {pendingDuplicate && (
+            <p className="text-xs text-yellow-500">⚠ 重複の可能性：同じテーマ・公開日のリールが既にあります（{KIND_LABEL[pendingDuplicate.kind]}・{pendingDuplicate.status}）</p>
+          )}
         </div>
       )}
 
@@ -340,7 +506,7 @@ function ReelsView({
               <p className="text-xs text-stone-500 mb-2">過去日 × 未投稿（{alertReels.length}件）— 配信済みなら「投稿済みにする」を押してください</p>
               {alertReels.map(r => (
                 <div key={r.id} className="bg-stone-800 border border-red-900/50 rounded-lg p-3 flex items-start gap-3">
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onOpen(r)}>
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`text-xs font-medium ${KIND_COLOR[r.kind] ?? 'text-stone-400'}`}>{KIND_LABEL[r.kind] ?? r.kind}</span>
                       <span className={`border rounded px-1.5 py-0.5 text-xs ${REEL_STATUS_COLOR[r.status as ReelStatus] ?? 'border-stone-600 text-stone-400'}`}>{r.status}</span>
@@ -375,7 +541,7 @@ function ReelsView({
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {reels.filter(r => r.status === status).map(r => (
-                  <ReelCard key={r.id} reel={r} onStatusChange={onStatusChange} onDelete={onDelete} />
+                  <ReelCard key={r.id} reel={r} onStatusChange={onStatusChange} onDelete={onDelete} onOpen={onOpen} />
                 ))}
               </div>
             </div>
@@ -402,7 +568,7 @@ function ReelsView({
                 <div key={dateStr} className={`bg-stone-900 min-h-16 p-1 ${isToday ? 'ring-1 ring-inset ring-stone-500' : ''}`}>
                   <p className={`text-xs mb-1 ${isToday ? 'text-stone-200 font-semibold' : 'text-stone-600'}`}>{day}</p>
                   {dayReels.map(r => (
-                    <div key={r.id} className={`text-xs rounded px-1 py-0.5 mb-0.5 truncate ${KIND_COLOR[r.kind] ?? 'text-stone-400'} bg-stone-800`} title={r.theme ?? ''}>
+                    <div key={r.id} onClick={() => onOpen(r)} className={`text-xs rounded px-1 py-0.5 mb-0.5 truncate cursor-pointer hover:bg-stone-700 ${KIND_COLOR[r.kind] ?? 'text-stone-400'} bg-stone-800`} title={r.theme ?? ''}>
                       {KIND_LABEL[r.kind]} {r.theme ? r.theme.slice(0, 8) : ''}
                     </div>
                   ))}
@@ -432,6 +598,7 @@ export default function Board() {
   const [newReelTheme, setNewReelTheme] = useState('');
   const [newReelKind, setNewReelKind] = useState<ReelKind>('shokunin');
   const [newReelDate, setNewReelDate] = useState('');
+  const [selectedReel, setSelectedReel] = useState<Reel | null>(null);
   const [activeTab, setActiveTab] = useState<'today' | 'upcoming' | 'someday'>('today');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [newLogContent, setNewLogContent] = useState('');
@@ -740,11 +907,14 @@ export default function Board() {
                   body: JSON.stringify({ theme: newReelTheme.trim(), kind: newReelKind, publish_date: newReelDate || null }),
                 });
                 if (res.ok) {
-                  const created: Reel = await res.json();
+                  const created: Reel & { _readback?: ReadbackResult } = await res.json();
                   setReels(rs => [...rs, created]);
                   setNewReelTheme('');
                   setNewReelDate('');
                   setShowReelForm(false);
+                  if (created._readback && !created._readback.ok) {
+                    window.alert(`⚠ read-back照合で不一致: ${created._readback.mismatches.join(', ')}`);
+                  }
                 }
               }}
               onStatusChange={async (id, status) => {
@@ -761,8 +931,12 @@ export default function Board() {
               onDelete={async (id) => {
                 if (!window.confirm('このリールを削除しますか？')) return;
                 const res = await fetch(`/api/reels?id=${id}`, { method: 'DELETE' });
-                if (res.ok) setReels(rs => rs.filter(r => r.id !== id));
+                if (res.ok) {
+                  setReels(rs => rs.filter(r => r.id !== id));
+                  setSelectedReel(sr => sr?.id === id ? null : sr);
+                }
               }}
+              onOpen={setSelectedReel}
             />
           ) : activeNav === 'projects' ? (
             <>
@@ -1069,6 +1243,32 @@ export default function Board() {
           )}
         </main>
       </div>
+      {selectedReel && (
+        <ReelDetailPanel
+          reel={selectedReel}
+          onClose={() => setSelectedReel(null)}
+          onSave={async (id, patch) => {
+            const res = await fetch(`/api/reels?id=${id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(patch),
+            });
+            if (!res.ok) return { ok: false, mismatches: ['_save_failed'] };
+            const updated: Reel & { _readback: ReadbackResult } = await res.json();
+            setReels(rs => rs.map(r => r.id === id ? updated : r));
+            setSelectedReel(updated);
+            return updated._readback;
+          }}
+          onDelete={async (id) => {
+            if (!window.confirm('このリールを削除しますか？')) return;
+            const res = await fetch(`/api/reels?id=${id}`, { method: 'DELETE' });
+            if (res.ok) {
+              setReels(rs => rs.filter(r => r.id !== id));
+              setSelectedReel(null);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
