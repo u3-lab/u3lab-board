@@ -11,6 +11,8 @@ const DAILY_SEEDS: SeedTask[] = [
   { title: 'Slack対応（朝）', category: 'other', priority: 'medium' },
   { title: 'Slack対応（昼）', category: 'other', priority: 'medium' },
   { title: 'Slack対応（夜）', category: 'other', priority: 'medium' },
+  { title: '住職リール 投稿予約', category: 'myozenji', priority: 'high' },
+  { title: '写真リール 投稿予約', category: 'photo', priority: 'high' },
 ];
 
 // 0=Sun, 1=Mon, ..., 6=Sat
