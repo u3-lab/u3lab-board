@@ -6,6 +6,25 @@ const VALID_STATUSES: TaskStatus[] = ['today', 'in_progress', 'waiting', 'done',
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET ?? '';
 
+// 同一案件（title+source）の未完了タスクをまとめる対象。手動作成・daily seed分は対象外。
+const DEDUP_SOURCES: TaskSource[] = ['webhook_line', 'webhook_slack'];
+const MEMO_HISTORY_LIMIT = 5;
+
+function jstTimeLabel(): string {
+  const jst = new Date(Date.now() + 9 * 3600 * 1000);
+  return jst.toISOString().slice(11, 16);
+}
+
+// memoは置換せず追記で履歴化する（直近MEMO_HISTORY_LIMIT件まで）。
+// LINEはpermalinkがnullなので、置換だと過去メッセージ本文が復元不能になるため。
+function appendMemo(existing: string | null, incoming: string | null): string | null {
+  if (!incoming) return existing ?? null;
+  const entry = `--- ${jstTimeLabel()} ---\n${incoming}`;
+  if (!existing) return entry;
+  const blocks = existing.split(/\n(?=--- \d{2}:\d{2} ---)/).filter(Boolean);
+  return [...blocks, entry].slice(-MEMO_HISTORY_LIMIT).join('\n');
+}
+
 function triage(text: string): { category: TaskCategory | null; priority: TaskPriority } {
   const t = text.toLowerCase();
   let category: TaskCategory | null = null;
@@ -58,6 +77,35 @@ export async function POST(req: NextRequest) {
   const priority = priorityOverride ?? triaged.priority;
 
   const db = supabaseAdmin();
+
+  if (DEDUP_SOURCES.includes(source)) {
+    const { data: existing } = await db
+      .from('tasks')
+      .select('id, memo')
+      .eq('title', title)
+      .eq('source', source)
+      .is('archived_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    const match = existing?.[0];
+    if (match) {
+      const { data, error } = await db
+        .from('tasks')
+        .update({
+          memo: appendMemo(match.memo, memo ?? null),
+          permalink: permalink ?? null,
+          source_ref: source_ref ?? null,
+          created_at: new Date().toISOString(),
+        })
+        .eq('id', match.id)
+        .select()
+        .single();
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json(data, { status: 200 });
+    }
+  }
+
   const { data, error } = await db.from('tasks').insert([{
     title,
     status: status ?? 'waiting',
