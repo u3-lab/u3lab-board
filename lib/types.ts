@@ -59,6 +59,27 @@ export interface Reel {
   notion_id?: string | null;
 }
 
+export type ConsultationStatus = '未対応' | '対応中' | '祐紀さん返信待ち' | '完了';
+
+export interface Consultation {
+  id: string;
+  consultant_name: string;
+  contact_ref?: string | null;
+  channel: string;
+  content: string;
+  status: ConsultationStatus;
+  reply_draft?: string | null;
+  danger_flag: boolean;
+  danger_note?: string | null;
+  danger_flagged_at?: string | null;
+  danger_ack: boolean;
+  danger_ack_at?: string | null;
+  received_at: string;
+  completed_at?: string | null;
+  archived_at?: string | null;
+  source_ref?: string | null;
+}
+
 export type TaskPriority = 'high' | 'medium' | 'low';
 export type TaskSource = 'manual' | 'webhook_line' | 'webhook_slack' | 'derived';
 export type TaskCategory = 'photo' | 'soudan' | 'myozenji' | 'u3lab' | 'sns' | 'other';

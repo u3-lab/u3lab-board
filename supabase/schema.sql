@@ -150,3 +150,34 @@ CREATE INDEX project_log_log_date_idx   ON project_log (log_date DESC);
 ALTER TABLE project_log ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "authenticated_all" ON project_log
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
+
+-- Consultations table（相談専用ツール・脱Notion・2026-07-15）
+-- 相談内容は最も繊細な個人情報。外部LLM APIには一切渡さない（board側の実装原則）。
+CREATE TYPE consultation_status AS ENUM ('未対応','対応中','祐紀さん返信待ち','完了');
+
+CREATE TABLE consultations (
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  consultant_name    TEXT NOT NULL,
+  contact_ref        TEXT,
+  channel            TEXT NOT NULL,
+  content            TEXT NOT NULL,
+  status             consultation_status NOT NULL DEFAULT '未対応',
+  reply_draft        TEXT,
+  danger_flag        BOOLEAN NOT NULL DEFAULT FALSE,
+  danger_note        TEXT,
+  danger_flagged_at  TIMESTAMPTZ,
+  danger_ack         BOOLEAN NOT NULL DEFAULT FALSE,
+  danger_ack_at      TIMESTAMPTZ,
+  received_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at       TIMESTAMPTZ,
+  archived_at        TIMESTAMPTZ,
+  source_ref         TEXT
+);
+
+CREATE INDEX idx_consultations_open        ON consultations (received_at DESC) WHERE archived_at IS NULL;
+CREATE INDEX idx_consultations_danger_open ON consultations (danger_flagged_at DESC) WHERE danger_flag = TRUE AND danger_ack = FALSE;
+
+ALTER TABLE consultations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "authenticated_all" ON consultations
+  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+-- service_roleはRLSバイパス（agent経由の書き込み用）
