@@ -7,24 +7,29 @@ CREATE TYPE task_source   AS ENUM ('manual', 'webhook_line', 'webhook_slack', 'd
 CREATE TYPE task_category AS ENUM ('photo', 'soudan', 'myozenji', 'u3lab', 'sns', 'other');
 
 CREATE TABLE tasks (
-  id           UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
-  title        TEXT          NOT NULL,
-  status       task_status   NOT NULL DEFAULT 'today',
-  priority     task_priority NOT NULL DEFAULT 'medium',
-  due_date     DATE,
-  assignee     TEXT          NOT NULL DEFAULT 'yuuki',
-  source       task_source   NOT NULL DEFAULT 'manual',
-  category     task_category,
-  memo         TEXT,
-  created_at   TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
-  completed_at TIMESTAMPTZ,
-  archived_at  TIMESTAMPTZ,
-  agent_id     TEXT
+  id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+  title         TEXT          NOT NULL,
+  status        task_status   NOT NULL DEFAULT 'today',
+  priority      task_priority NOT NULL DEFAULT 'medium',
+  due_date      DATE,
+  assignee      TEXT          NOT NULL DEFAULT 'yuuki',
+  source        task_source   NOT NULL DEFAULT 'manual',
+  category      task_category,
+  memo          TEXT,
+  created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+  completed_at  TIMESTAMPTZ,
+  archived_at   TIMESTAMPTZ,
+  agent_id      TEXT,
+  permalink     TEXT,
+  source_ref    TEXT,
+  started_at    TIMESTAMPTZ,
+  gcal_event_id TEXT
 );
 
 CREATE INDEX idx_tasks_status    ON tasks (status)    WHERE archived_at IS NULL;
 CREATE INDEX idx_tasks_assignee  ON tasks (assignee)  WHERE archived_at IS NULL;
 CREATE INDEX idx_tasks_due_date  ON tasks (due_date)  WHERE archived_at IS NULL;
+CREATE UNIQUE INDEX tasks_source_ref_unique ON tasks (source_ref) WHERE source_ref IS NOT NULL;
 
 -- Auto-archive when status set to done
 CREATE OR REPLACE FUNCTION auto_archive() RETURNS TRIGGER AS $$
@@ -129,6 +134,10 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg_assign_project_no
   BEFORE INSERT ON projects
   FOR EACH ROW EXECUTE FUNCTION assign_project_no();
+
+-- tasks ⇄ projects 連携（プロジェクトが存在してから追加する必要があるためALTERで追記）
+ALTER TABLE tasks ADD COLUMN project_id UUID REFERENCES projects(id) ON DELETE SET NULL;
+CREATE INDEX tasks_project_id_idx ON tasks (project_id);
 
 -- RLS: 現在無効（service_role/APIルート経由のみで運用中）
 

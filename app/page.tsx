@@ -58,13 +58,15 @@ function StatusToggle({ status, onStart, onDone }: { status: string; onStart: ()
   );
 }
 
-function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday }: {
+function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday, project, onOpenProject }: {
   task: Task;
   onDone: (id: string) => void;
   onStart: (id: string) => void;
   onEdit: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onMarkToday?: (id: string) => void;
+  project?: Project;
+  onOpenProject?: (p: Project) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
@@ -107,6 +109,15 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday }: {
       <div className="flex-1 min-w-0">
         <p className="text-sm text-stone-200 truncate">{task.title}</p>
         <p className="text-xs text-stone-500 mt-0.5">
+          {project && (
+            <button
+              onClick={e => { e.stopPropagation(); onOpenProject?.(project); }}
+              className="mr-2 px-1.5 py-0.5 rounded border border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-200 transition-colors"
+              title={`プロジェクト: ${project.name}`}
+            >
+              {project.no != null ? `No.${project.no} ` : ''}{project.name}
+            </button>
+          )}
           {isWaiting && sourceIcon && <span className="mr-1 font-medium text-stone-400">{sourceIcon}:</span>}
           {task.category && task.category !== 'other' && <span className="mr-2">{CATEGORY_LABEL[task.category] ?? task.category}</span>}
           {task.assignee !== 'yuuki' && <span className="mr-2 text-blue-400">→ {task.assignee}</span>}
@@ -183,6 +194,7 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
         {project.blocker_type && project.blocker_type !== 'none' && (
           <span className="text-red-400">⚠ {project.blocker_type === 'external' ? '外部待ち' : '内部ブロック'}</span>
         )}
+        {project.activity_date && <span className="ml-auto text-stone-600">更新 {formatDate(project.activity_date)}</span>}
       </div>
     </div>
   );
@@ -537,6 +549,7 @@ export default function Board() {
   const [newPriority, setNewPriority] = useState<TaskPriority>('medium');
   const [newDest, setNewDest] = useState<'today' | 'due' | 'someday'>('today');
   const [newDueDate, setNewDueDate] = useState('');
+  const [newProjectId, setNewProjectId] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -565,6 +578,11 @@ export default function Board() {
   const inProgress = tasks.filter(t => t.status === 'in_progress');
   const someday = tasks.filter(t => t.status === 'someday');
   const upcoming = tasks.filter(t => t.due_date && t.status !== 'done' && t.due_date >= todayStr).sort((a, b) => (a.due_date ?? '') < (b.due_date ?? '') ? -1 : 1);
+  const relatedTasks = selectedProject
+    ? tasks.filter(t => t.project_id === selectedProject.id && t.status !== 'done' && t.status !== 'someday')
+    : [];
+  const projectsById = new Map(projects.map(p => [p.id, p]));
+  const openProject = useCallback((p: Project) => { setActiveNav('projects'); setSelectedProject(p); }, []);
 
   const markDone = useCallback(async (id: string) => {
     const res = await fetch(`/api/tasks?id=${id}`, {
@@ -666,6 +684,7 @@ export default function Board() {
       assignee: 'yuuki',
       source: 'manual' as TaskSource,
       ...(newDest === 'due' && newDueDate ? { due_date: newDueDate } : {}),
+      ...(newProjectId ? { project_id: newProjectId } : {}),
     };
     const res = await fetch('/api/tasks', {
       method: 'POST',
@@ -680,6 +699,7 @@ export default function Board() {
     setNewPriority('medium');
     setNewDest('today');
     setNewDueDate('');
+    setNewProjectId('');
     setShowAdd(false);
   };
 
@@ -726,9 +746,9 @@ export default function Board() {
                 <option value="low">🟢 低</option>
               </select>
               <button onClick={addTask} className="text-xs px-3 py-1.5 bg-stone-100 text-stone-900 rounded hover:bg-white">追加</button>
-              <button onClick={() => { setShowAdd(false); setNewDest('today'); setNewDueDate(''); }} className="text-xs px-3 py-1.5 text-stone-400 hover:text-stone-200">キャンセル</button>
+              <button onClick={() => { setShowAdd(false); setNewDest('today'); setNewDueDate(''); setNewProjectId(''); }} className="text-xs px-3 py-1.5 text-stone-400 hover:text-stone-200">キャンセル</button>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <button
                 type="button"
                 onClick={() => setNewDest(d => d === 'today' ? 'due' : d === 'due' ? 'someday' : 'today')}
@@ -748,6 +768,16 @@ export default function Board() {
                   className="text-xs border border-stone-600 rounded px-2 py-1.5 bg-stone-700 text-stone-200 outline-none focus:border-blue-500"
                 />
               )}
+              <select
+                value={newProjectId}
+                onChange={e => setNewProjectId(e.target.value)}
+                className={`text-xs border rounded px-2 py-1.5 bg-stone-700 ${newProjectId ? 'border-stone-400 text-stone-100' : 'border-stone-600 text-stone-400'}`}
+              >
+                <option value="">プロジェクトなし</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.no != null ? `No.${p.no} ` : ''}{p.name}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -804,12 +834,18 @@ export default function Board() {
             <>
               {selectedProject ? (
                 <>
-                  <div className="flex items-center gap-3 mb-5">
+                  <div className="flex items-center justify-between gap-3 mb-5">
                     <button
                       onClick={() => { setSelectedProject(null); setShowLogForm(false); setShowAllLogs(false); setShowAllDone(false); }}
                       className="text-xs text-stone-500 hover:text-stone-300 transition-colors"
                     >
                       ← 一覧に戻る
+                    </button>
+                    <button
+                      onClick={() => { setNewProjectId(selectedProject.id); setShowAdd(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      className="text-xs px-3 py-1.5 border border-stone-600 text-stone-300 rounded hover:border-stone-400 hover:text-stone-100 transition-colors"
+                    >
+                      + このプロジェクトのタスク
                     </button>
                   </div>
 
@@ -954,13 +990,12 @@ export default function Board() {
                   {/* 関連タスク */}
                   <section>
                     <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3 flex items-center">
-                      関連タスク（今日やる）
-                      <HelpTip text="このプロジェクトに紐づく「今日やる」ステータスのタスクです。タスク画面で project_id を設定すると表示されます。" />
+                      関連タスク
+                      <HelpTip text="このプロジェクトに紐づく未完了タスク（今日やる・進行中・返信待ち・期限あり）です。完了済みは上の「済み」に移ります。" />
                     </h3>
-                    {tasks.filter(t => t.project_id === selectedProject.id && t.status === 'today').length === 0
+                    {relatedTasks.length === 0
                       ? <p className="text-sm text-stone-600 py-4 text-center">なし</p>
-                      : tasks.filter(t => t.project_id === selectedProject.id && t.status === 'today')
-                          .map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
+                      : relatedTasks.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
                     }
                   </section>
                 </>
@@ -1041,7 +1076,7 @@ export default function Board() {
                     ⚙️ 進行中
                     <span className="ml-2 text-stone-600 font-normal normal-case">({inProgress.length})</span>
                   </h2>
-                  {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)}
+                  {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} />)}
                 </section>
               )}
 
@@ -1050,17 +1085,17 @@ export default function Board() {
                 {activeTab === 'today' && (
                   today.length === 0
                     ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
-                    : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
+                    : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} />)
                 )}
                 {activeTab === 'upcoming' && (
                   upcoming.length === 0
                     ? <p className="text-sm text-stone-600 py-4 text-center">締切のタスクなし</p>
-                    : upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} onMarkToday={markToday} />)
+                    : upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} onMarkToday={markToday} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} />)
                 )}
                 {activeTab === 'someday' && (
                   someday.length === 0
                     ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
-                    : someday.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} onMarkToday={markToday} />)
+                    : someday.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} onMarkToday={markToday} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} />)
                 )}
               </section>
 
@@ -1072,7 +1107,7 @@ export default function Board() {
                 </h2>
                 {waiting.length === 0
                   ? <p className="text-sm text-stone-600 py-4 text-center">なし</p>
-                  : waiting.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
+                  : waiting.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} />)
                 }
               </section>
 

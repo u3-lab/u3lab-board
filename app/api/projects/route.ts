@@ -79,7 +79,7 @@ export async function GET() {
 
   withSort.sort((a, b) => b._activity.localeCompare(a._activity));
 
-  const result: Project[] = withSort.map(({ _activity, ...p }) => p as Project);
+  const result: Project[] = withSort.map(({ _activity, ...p }) => ({ ...p, activity_date: _activity }) as Project);
 
   return NextResponse.json(result);
 }

@@ -23,6 +23,7 @@ export interface Project {
   task_count_upcoming?: number;
   logs?: ProjectLog[];
   done_tasks?: Task[];
+  activity_date?: string;
 }
 
 export interface ProjectLog {
