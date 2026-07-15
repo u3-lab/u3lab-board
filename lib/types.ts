@@ -1,15 +1,20 @@
 export type TaskStatus = 'today' | 'in_progress' | 'waiting' | 'done' | 'someday';
-export type ProjectStatus = 'active' | 'waiting' | 'stalled' | 'done';
+export type ProjectStatus = 'focus' | 'scheduled' | 'waiting' | 'seed' | 'done';
+export type ProjectKind = 'project' | 'routine';
 export type BlockerType = 'external' | 'internal' | 'none';
 
 export interface Project {
   id: string;
   name: string;
   status: ProjectStatus;
+  kind: ProjectKind;
   category?: string | null;
   assignees: string[];
   assignee_role?: string | null;
   due_date?: string | null;
+  follow_up_date?: string | null;
+  sort_order?: number | null;
+  done_candidate: boolean;
   last_updated?: string | null;
   next_action?: string | null;
   blocker_type?: BlockerType | null;
@@ -21,9 +26,19 @@ export interface Project {
   // joined fields (from API)
   task_count_today?: number;
   task_count_upcoming?: number;
+  task_count_open?: number;
+  task_count_done?: number;
   logs?: ProjectLog[];
   done_tasks?: Task[];
   activity_date?: string;
+  // 相談カテゴリ用（category==='相談'）
+  content?: string | null;
+  reply_draft?: string | null;
+  danger_flag: boolean;
+  danger_note?: string | null;
+  danger_flagged_at?: string | null;
+  danger_ack: boolean;
+  danger_ack_at?: string | null;
 }
 
 export interface ProjectLog {
@@ -104,4 +119,5 @@ export interface Task {
   agent_id?: string | null;
   project_id?: string | null;
   gcal_event_id?: string | null;
+  is_next_action?: boolean;
 }

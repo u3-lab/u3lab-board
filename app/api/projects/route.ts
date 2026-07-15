@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import type { Project } from '@/lib/types';
+import { detectDangerKeyword } from '@/lib/danger-keywords';
 
 // GET /api/projects  → all projects with task counts and recent logs
 export async function GET() {
@@ -37,12 +38,13 @@ export async function GET() {
 
   const todayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 
-  const countMap = new Map<string, { today: number; upcoming: number }>();
+  const countMap = new Map<string, { today: number; upcoming: number; open: number }>();
   for (const t of taskCounts ?? []) {
     if (!t.project_id) continue;
-    const c = countMap.get(t.project_id) ?? { today: 0, upcoming: 0 };
+    const c = countMap.get(t.project_id) ?? { today: 0, upcoming: 0, open: 0 };
     if (t.status === 'today') c.today++;
     if (t.due_date && t.due_date >= todayStr && t.status !== 'done') c.upcoming++;
+    c.open++; // taskCounts は archived_at IS NULL のみ = done は自動archiveで除外済みなので全件が未完了
     countMap.set(t.project_id, c);
   }
 
@@ -71,6 +73,8 @@ export async function GET() {
       ...p,
       task_count_today: countMap.get(p.id)?.today ?? 0,
       task_count_upcoming: countMap.get(p.id)?.upcoming ?? 0,
+      task_count_open: countMap.get(p.id)?.open ?? 0,
+      task_count_done: (doneTaskMap.get(p.id) ?? []).length,
       done_tasks: (doneTaskMap.get(p.id) ?? []).slice(0, 10) as Project['done_tasks'],
       logs: pLogs.slice(0, 50) as Project['logs'],
       _activity: activityDate,
@@ -87,6 +91,20 @@ export async function GET() {
 // POST /api/projects
 export async function POST(req: NextRequest) {
   const body: Partial<Project> = await req.json();
+
+  // 相談カテゴリ：ローカル文字列マッチのみの補助的キーワード検知（外部AI・外部API不使用）
+  if (body.category === '相談' && body.content && body.danger_flag !== true) {
+    const matched = detectDangerKeyword(body.content);
+    if (matched) {
+      body.danger_flag = true;
+      body.danger_note = `自動検知: 「${matched}」`;
+      body.danger_flagged_at = new Date().toISOString();
+    }
+  } else if (body.danger_flag === true && !body.danger_flagged_at) {
+    body.danger_flagged_at = new Date().toISOString();
+    body.danger_note = body.danger_note ?? '登録時に手動フラグ';
+  }
+
   const db = supabaseAdmin();
   const { data, error } = await db.from('projects').insert([body]).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -99,8 +117,24 @@ export async function PATCH(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
   const body: Partial<Project> = await req.json();
+  const now = new Date().toISOString();
+  const updates: Partial<Project> = { ...body };
+
+  // 手動でdanger_flagをON/OFFした場合のタイムスタンプ管理（consultationsと同じ設計）
+  if (body.danger_flag === true) {
+    updates.danger_flagged_at = now;
+    updates.danger_ack = false;
+    updates.danger_ack_at = null;
+  } else if (body.danger_flag === false) {
+    updates.danger_ack = false;
+    updates.danger_ack_at = null;
+  }
+  if (body.danger_ack === true) {
+    updates.danger_ack_at = now;
+  }
+
   const db = supabaseAdmin();
-  const { data, error } = await db.from('projects').update(body).eq('id', id).select().single();
+  const { data, error } = await db.from('projects').update(updates).eq('id', id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }

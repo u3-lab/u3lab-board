@@ -92,6 +92,16 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // project_id付きタスクが完了したら、紐づくプロジェクトの鮮度(last_updated)を更新（板が育くエンジン・非fatal）
+  if (body.status === 'done' && data?.project_id) {
+    try {
+      const jstDate = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+      await db.from('projects').update({ last_updated: jstDate }).eq('id', data.project_id);
+    } catch (e) {
+      console.error('project freshness update failed (non-fatal):', e);
+    }
+  }
+
   return NextResponse.json(data);
 }
 

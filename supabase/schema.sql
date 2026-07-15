@@ -23,7 +23,8 @@ CREATE TABLE tasks (
   permalink     TEXT,
   source_ref    TEXT,
   started_at    TIMESTAMPTZ,
-  gcal_event_id TEXT
+  gcal_event_id TEXT,
+  is_next_action BOOLEAN      NOT NULL DEFAULT FALSE
 );
 
 CREATE INDEX idx_tasks_status    ON tasks (status)    WHERE archived_at IS NULL;
@@ -100,11 +101,12 @@ CREATE POLICY "authenticated_all" ON reels
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Projects table (プロジェクト一覧・俯瞰ビュー)
+-- status は 2026-07-15 にレーン再設計（active/waiting/stalled/done → focus/scheduled/waiting/seed/done）
 CREATE TABLE projects (
   id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   name           TEXT        NOT NULL,
-  status         TEXT        NOT NULL DEFAULT 'active'
-                 CHECK (status IN ('active', 'waiting', 'stalled', 'done')),
+  status         TEXT        NOT NULL DEFAULT 'focus'
+                 CHECK (status IN ('focus', 'scheduled', 'waiting', 'seed', 'done')),
   category       TEXT,
   assignees      TEXT[]      NOT NULL DEFAULT '{}',
   assignee_role  TEXT,
@@ -116,10 +118,24 @@ CREATE TABLE projects (
   provenance     TEXT,
   summary        TEXT,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  no             INTEGER
+  no             INTEGER,
+  kind           TEXT        NOT NULL DEFAULT 'project' CHECK (kind IN ('project', 'routine')),
+  follow_up_date DATE,
+  sort_order     INT,
+  done_candidate BOOLEAN     NOT NULL DEFAULT FALSE,
+  -- 相談カテゴリ用（category='相談'）。2026-07-15、standalone consultationsツールから統合。
+  -- content/reply_draftを外部LLM APIに渡す処理は一切実装しない。
+  content            TEXT,
+  reply_draft        TEXT,
+  danger_flag        BOOLEAN NOT NULL DEFAULT FALSE,
+  danger_note        TEXT,
+  danger_flagged_at  TIMESTAMPTZ,
+  danger_ack         BOOLEAN NOT NULL DEFAULT FALSE,
+  danger_ack_at      TIMESTAMPTZ
 );
 
 CREATE UNIQUE INDEX projects_no_uidx ON projects (no) WHERE no IS NOT NULL;
+CREATE INDEX projects_danger_open_idx ON projects (danger_flagged_at DESC) WHERE danger_flag = TRUE AND danger_ack = FALSE;
 
 -- No.（通し番号）は一度振ったら不変。新規プロジェクトは自動でmax+1を採番。
 CREATE OR REPLACE FUNCTION assign_project_no() RETURNS TRIGGER AS $$

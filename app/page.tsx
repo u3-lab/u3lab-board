@@ -58,7 +58,7 @@ function StatusToggle({ status, onStart, onDone }: { status: string; onStart: ()
   );
 }
 
-function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday, project, onOpenProject }: {
+function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday, project, onOpenProject, onSetNextAction }: {
   task: Task;
   onDone: (id: string) => void;
   onStart: (id: string) => void;
@@ -67,6 +67,7 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday, project
   onMarkToday?: (id: string) => void;
   project?: Project;
   onOpenProject?: (p: Project) => void;
+  onSetNextAction?: (task: Task) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
@@ -139,6 +140,17 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday, project
           <span className="w-1.5 h-1.5 rounded-full bg-current" />
         </button>
       )}
+      {onSetNextAction && task.project_id && (
+        <button
+          onClick={() => onSetNextAction(task)}
+          className={`flex-shrink-0 text-xs px-1.5 py-1 transition-colors ${
+            task.is_next_action ? 'text-orange-400' : 'text-stone-700 hover:text-stone-400 opacity-0 group-hover/row:opacity-100'
+          }`}
+          title={task.is_next_action ? '次の一手（解除）' : '次の一手にする'}
+        >
+          {task.is_next_action ? '▶' : '▷'}
+        </button>
+      )}
       <button
         onClick={() => setEditing(true)}
         className="flex-shrink-0 text-xs px-1.5 py-1 text-stone-700 hover:text-stone-400 transition-colors opacity-0 group-hover/row:opacity-100"
@@ -158,22 +170,63 @@ function TaskRow({ task, onDone, onStart, onEdit, onDelete, onMarkToday, project
 }
 
 const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
-  active: '進行中', waiting: '待機', stalled: '停滞', done: '完了',
+  focus: '🔥 今週動かす', scheduled: '📅 日付が来る', waiting: '⏳ 待ち', seed: '🌱 種・寝かせ', done: '✅ 完了',
 };
 const PROJECT_STATUS_COLOR: Record<ProjectStatus, string> = {
-  active: 'text-green-400', waiting: 'text-yellow-400', stalled: 'text-red-400', done: 'text-stone-500',
+  focus: 'text-orange-400', scheduled: 'text-blue-400', waiting: 'text-yellow-400', seed: 'text-emerald-400', done: 'text-stone-500',
 };
+const FOCUS_SOFT_LIMIT = 7;
+const STALL_DAYS = 7;
+
+// カテゴリ実データ（10種、2026-07-15時点）を6色に統合。未知のカテゴリはstoneにフォールバック。
+const CATEGORY_META: Record<string, { icon: string; border: string }> = {
+  'オフ会・イベント': { icon: '📸', border: 'border-l-sky-500' },
+  '撮影案件': { icon: '📸', border: 'border-l-sky-500' },
+  '写真塾': { icon: '📸', border: 'border-l-sky-500' },
+  'U3LAB法人・事業基盤': { icon: '🏢', border: 'border-l-emerald-500' },
+  '事業・ブランド': { icon: '🏢', border: 'border-l-emerald-500' },
+  '書籍出版': { icon: '📚', border: 'border-l-amber-500' },
+  '寺院・明善寺': { icon: '⛩', border: 'border-l-purple-500' },
+  'システム・自動化': { icon: '🛠', border: 'border-l-stone-500' },
+  '個人事務': { icon: '👤', border: 'border-l-pink-500' },
+  '相談': { icon: '💬', border: 'border-l-pink-500' },
+};
+const CATEGORY_DEFAULT = { icon: '🛠', border: 'border-l-stone-500' };
+const categoryMeta = (category?: string | null) => (category && CATEGORY_META[category]) || CATEGORY_DEFAULT;
+
+// focusレーンで7日間 動き(activity_date)がない＝停滞バッジ
+function isStalled(project: Project): boolean {
+  if (project.status !== 'focus' || !project.activity_date) return false;
+  const days = (Date.now() - new Date(project.activity_date).getTime()) / 86400000;
+  return days >= STALL_DAYS;
+}
+// waitingでフォロー予定日を過ぎている＝赤バッジ
+function isFollowUpOverdue(project: Project): boolean {
+  if (project.status !== 'waiting' || !project.follow_up_date) return false;
+  const todayStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+  return project.follow_up_date < todayStr;
+}
 
 function ProjectCard({ project, onClick }: { project: Project; onClick: () => void }) {
+  const meta = categoryMeta(project.category);
+  const stalled = isStalled(project);
+  const followUpOverdue = isFollowUpOverdue(project);
+  const dangerOpen = project.danger_flag && !project.danger_ack;
   return (
     <div
       onClick={onClick}
-      className="border border-stone-700 rounded-lg p-4 hover:border-stone-500 cursor-pointer transition-colors bg-stone-800/50"
+      className={`border-l-4 ${dangerOpen ? 'border-l-red-500 bg-red-950 border-y border-r border-red-700' : `${meta.border} border-y border-r border-stone-700 bg-stone-800/50`} rounded-lg p-4 hover:border-stone-500 cursor-pointer transition-colors`}
     >
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <p className="text-sm font-medium text-stone-100 leading-snug">
+          <span className="mr-1">{meta.icon}</span>
           {project.no != null && <span className="text-stone-500 mr-1">No.{project.no}</span>}
           {project.name}
+          {project.kind === 'routine' && <span className="ml-2 text-xs text-stone-500 border border-stone-600 rounded px-1">常設</span>}
+          {project.done_candidate && project.status !== 'done' && (
+            <span className="ml-2 text-xs text-emerald-400 border border-emerald-700 rounded px-1">完了候補</span>
+          )}
+          {dangerOpen && <span className="ml-2 text-xs text-red-300 border border-red-600 rounded px-1">⚠️ 未確認</span>}
         </p>
         <span className={`text-xs flex-shrink-0 font-medium ${PROJECT_STATUS_COLOR[project.status]}`}>
           {PROJECT_STATUS_LABEL[project.status]}
@@ -185,15 +238,20 @@ function ProjectCard({ project, onClick }: { project: Project; onClick: () => vo
       {project.next_action && (
         <p className="text-xs text-stone-400 mb-2 line-clamp-2">→ {project.next_action}</p>
       )}
-      <div className="flex items-center gap-3 text-xs text-stone-600">
-        {project.category && <span>{project.category}</span>}
+      {stalled && <p className="text-xs text-red-400 mb-1.5">⚠ {STALL_DAYS}日動きなし</p>}
+      {followUpOverdue && <p className="text-xs text-red-400 mb-1.5">⚠ フォロー予定日超過（{project.follow_up_date}）</p>}
+      <div className="flex items-center gap-3 text-xs text-stone-600 flex-wrap">
         {(project.task_count_today ?? 0) > 0 && (
           <span className="text-blue-400">今日やる {project.task_count_today}</span>
         )}
         {project.due_date && <span className="text-stone-500">期限 {project.due_date}</span>}
+        {project.status === 'waiting' && project.follow_up_date && (
+          <span className={followUpOverdue ? 'text-red-400' : 'text-stone-500'}>フォロー {project.follow_up_date}</span>
+        )}
         {project.blocker_type && project.blocker_type !== 'none' && (
           <span className="text-red-400">⚠ {project.blocker_type === 'external' ? '外部待ち' : '内部ブロック'}</span>
         )}
+        <span className="text-stone-600">未完{project.task_count_open ?? 0}／済{project.task_count_done ?? 0}</span>
         {project.activity_date && <span className="ml-auto text-stone-600">更新 {formatDate(project.activity_date)}</span>}
       </div>
     </div>
@@ -550,6 +608,7 @@ export default function Board() {
   const [newDest, setNewDest] = useState<'today' | 'due' | 'someday'>('today');
   const [newDueDate, setNewDueDate] = useState('');
   const [newProjectId, setNewProjectId] = useState('');
+  const [showDoneProjects, setShowDoneProjects] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -653,6 +712,61 @@ export default function Board() {
       setTasks(ts => ts.map(t => t.id === id ? updated : t));
     }
   }, []);
+
+  // 「次の一手」は1プロジェクトにつき1つの想定。指定時は同プロジェクトの他の次の一手を解除。
+  const setNextAction = useCallback(async (task: Task) => {
+    const wasSet = !!task.is_next_action;
+    const siblings = tasks.filter(t => t.project_id === task.project_id && t.is_next_action && t.id !== task.id);
+    await Promise.all(siblings.map(s => fetch(`/api/tasks?id=${s.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_next_action: false }),
+    })));
+    const res = await fetch(`/api/tasks?id=${task.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_next_action: !wasSet }),
+    });
+    if (res.ok) {
+      const updated: Task = await res.json();
+      setTasks(ts => ts.map(t => {
+        if (t.id === updated.id) return updated;
+        if (siblings.some(s => s.id === t.id)) return { ...t, is_next_action: false };
+        return t;
+      }));
+    }
+  }, [tasks]);
+
+  const patchProject = useCallback(async (id: string, updates: Partial<Project>) => {
+    const res = await fetch(`/api/projects?id=${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (res.ok) {
+      const updated: Project = await res.json();
+      setProjects(ps => ps.map(p => p.id === id ? { ...p, ...updated } : p));
+      setSelectedProject(sp => sp?.id === id ? { ...sp, ...updated } : sp);
+    }
+  }, []);
+
+  // 次の一手タスクを完了させたら「次の一手は？」を尋ねて新タスクを作る（板が育つエンジン）
+  const markDoneWithNextAction = useCallback(async (task: Task) => {
+    await markDone(task.id);
+    if (task.is_next_action && task.project_id) {
+      const next = window.prompt('次の一手は？（空欄でスキップ）');
+      if (next && next.trim()) {
+        const res = await fetch('/api/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: next.trim(), status: 'today', priority: 'medium', assignee: 'yuuki',
+            source: 'manual', project_id: task.project_id, is_next_action: true,
+          }),
+        });
+        if (res.ok) {
+          const created: Task = await res.json();
+          setTasks(ts => [created, ...ts]);
+        }
+      }
+    }
+  }, [markDone]);
 
   const addProjectLog = useCallback(async (projectId: string, content: string) => {
     if (!content.trim()) return;
@@ -797,9 +911,9 @@ export default function Board() {
             className={`flex items-center gap-2 px-4 py-2.5 text-sm cursor-pointer ${activeNav === 'projects' ? 'text-stone-100 bg-stone-700' : 'text-stone-400 hover:bg-stone-700'}`}
           >
             🗂 プロジェクト
-            {projects.filter(p => p.status === 'active').length > 0 && (
+            {projects.filter(p => p.status === 'focus').length > 0 && (
               <span className="ml-auto text-xs bg-stone-700 text-stone-400 px-1.5 py-0.5 rounded-full">
-                {projects.filter(p => p.status === 'active').length}
+                {projects.filter(p => p.status === 'focus').length}
               </span>
             )}
           </div>
@@ -855,10 +969,18 @@ export default function Board() {
                       <h2 className="text-base font-semibold text-stone-100">
                         {selectedProject.no != null && <span className="text-stone-500 mr-1.5">No.{selectedProject.no}</span>}
                         {selectedProject.name}
+                        {selectedProject.kind === 'routine' && <span className="ml-2 text-xs text-stone-500 border border-stone-600 rounded px-1 align-middle">常設</span>}
                       </h2>
-                      <span className={`text-xs font-medium flex-shrink-0 ${PROJECT_STATUS_COLOR[selectedProject.status]}`}>
-                        {PROJECT_STATUS_LABEL[selectedProject.status]}
-                      </span>
+                      <select
+                        value={selectedProject.status}
+                        onChange={e => patchProject(selectedProject.id, { status: e.target.value as ProjectStatus })}
+                        disabled={selectedProject.status === 'done'}
+                        className={`text-xs font-medium flex-shrink-0 bg-stone-900 border border-stone-700 rounded px-2 py-1 ${PROJECT_STATUS_COLOR[selectedProject.status]}`}
+                      >
+                        {(['focus', 'scheduled', 'waiting', 'seed', 'done'] as ProjectStatus[]).map(s => (
+                          <option key={s} value={s}>{PROJECT_STATUS_LABEL[s]}</option>
+                        ))}
+                      </select>
                     </div>
 
                     {/* 概要 */}
@@ -873,6 +995,23 @@ export default function Board() {
                         <span>担当: {selectedProject.assignees.join(', ')}{selectedProject.assignee_role ? ` (${selectedProject.assignee_role})` : ''}</span>
                       )}
                       {selectedProject.due_date && <span>期限: {selectedProject.due_date}</span>}
+                      <button
+                        onClick={() => patchProject(selectedProject.id, { kind: selectedProject.kind === 'routine' ? 'project' : 'routine' })}
+                        className="text-stone-500 hover:text-stone-300 underline decoration-dotted transition-colors"
+                      >
+                        {selectedProject.kind === 'routine' ? '常設運用を解除' : '常設運用にする'}
+                      </button>
+                      {selectedProject.status === 'waiting' && (
+                        <span className="flex items-center gap-1">
+                          フォロー予定日:
+                          <input
+                            type="date"
+                            value={selectedProject.follow_up_date ?? ''}
+                            onChange={e => patchProject(selectedProject.id, { follow_up_date: e.target.value || null })}
+                            className="bg-stone-900 border border-stone-700 rounded px-1 py-0.5 text-stone-300"
+                          />
+                        </span>
+                      )}
                     </div>
 
                     {/* NA・ブロッカー */}
@@ -882,7 +1021,103 @@ export default function Board() {
                     {selectedProject.blocker_type && selectedProject.blocker_type !== 'none' && (
                       <p className="text-xs text-red-400 mt-2">⚠ ブロッカー: {selectedProject.blocker_detail ?? selectedProject.blocker_type}</p>
                     )}
+
+                    {/* 完了候補・完了 */}
+                    {selectedProject.status !== 'done' && (
+                      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-stone-800">
+                        <button
+                          onClick={() => patchProject(selectedProject.id, { done_candidate: !selectedProject.done_candidate })}
+                          className={`text-xs px-2.5 py-1 rounded border transition-colors ${
+                            selectedProject.done_candidate
+                              ? 'border-emerald-600 text-emerald-400 bg-emerald-900/20'
+                              : 'border-stone-600 text-stone-500 hover:border-stone-400'
+                          }`}
+                        >
+                          🏁 {selectedProject.done_candidate ? '完了候補（チーム提案中）' : '完了候補にする'}
+                        </button>
+                        <span className="text-xs text-stone-600">完了ボタンは祐紀さんが押す運用です</span>
+                        <button
+                          onClick={() => { if (window.confirm(`「${selectedProject.name}」を完了にしますか？`)) patchProject(selectedProject.id, { status: 'done', done_candidate: false }); }}
+                          className="ml-auto text-xs px-2.5 py-1 rounded border border-stone-600 text-stone-300 hover:border-emerald-500 hover:text-emerald-400 transition-colors"
+                        >
+                          ✓ 完了にする
+                        </button>
+                      </div>
+                    )}
                   </div>
+
+                  {/* 相談カテゴリ専用パネル（旧consultationsツールの安全機能を移植） */}
+                  {selectedProject.category === '相談' && (
+                    <section className={`mb-5 p-4 rounded-lg border ${selectedProject.danger_flag && !selectedProject.danger_ack ? 'border-red-600 bg-red-950' : 'border-stone-700'}`}>
+                      {selectedProject.danger_flag && (
+                        <div className="mb-3">
+                          <p className={`text-sm font-medium ${selectedProject.danger_ack ? 'text-stone-400' : 'text-red-300'}`}>
+                            ⚠️ 危険フラグ: {selectedProject.danger_ack ? '確認済み' : 'ON（未確認）'}
+                          </p>
+                          {selectedProject.danger_note && <p className="text-xs text-stone-500 mt-1">{selectedProject.danger_note}</p>}
+                          <div className="flex gap-2 mt-2">
+                            {!selectedProject.danger_ack && (
+                              <button
+                                onClick={() => patchProject(selectedProject.id, { danger_ack: true })}
+                                className="text-xs px-2 py-1 rounded bg-red-700 hover:bg-red-600 text-white"
+                              >
+                                確認済みにする
+                              </button>
+                            )}
+                            <button
+                              onClick={() => patchProject(selectedProject.id, { danger_flag: false })}
+                              className="text-xs px-2 py-1 rounded bg-stone-700 hover:bg-stone-600 text-stone-300"
+                            >
+                              フラグ解除
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {!selectedProject.danger_flag && (
+                        <button
+                          onClick={() => patchProject(selectedProject.id, { danger_flag: true, danger_note: '手動フラグ' })}
+                          className="mb-3 text-xs px-2 py-1 rounded border border-red-700 text-red-400 hover:bg-red-950"
+                        >
+                          ⚠️ 危険フラグを立てる
+                        </button>
+                      )}
+                      <div className="mb-3">
+                        <p className="text-xs text-stone-500 mb-1">相談内容</p>
+                        <div className="text-sm text-stone-200 bg-stone-900 rounded p-3 whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
+                          {selectedProject.content || '（未入力）'}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-xs text-stone-500 mb-1">返信文</p>
+                        <textarea
+                          defaultValue={selectedProject.reply_draft ?? ''}
+                          onBlur={e => { if (e.target.value !== (selectedProject.reply_draft ?? '')) patchProject(selectedProject.id, { reply_draft: e.target.value }); }}
+                          className="w-full text-sm bg-stone-900 border border-stone-700 rounded p-3 text-stone-200 min-h-24"
+                          placeholder="返信文をここに書く"
+                        />
+                      </div>
+                    </section>
+                  )}
+
+                  {/* 次の一手（focusレーンの心臓部） */}
+                  {selectedProject.status === 'focus' && (
+                    <section className="mb-5">
+                      <h3 className="text-xs font-semibold text-stone-500 uppercase tracking-wider mb-3 flex items-center">
+                        ▶ 次の一手
+                        <HelpTip text="このプロジェクトで次に手を動かすタスクです。完了すると「次の一手は？」と聞かれ、続きを登録できます。focusは常にこれを1つ持つのが理想です。" />
+                      </h3>
+                      {(() => {
+                        const nextActionTasks = tasks.filter(t => t.project_id === selectedProject.id && t.is_next_action);
+                        return nextActionTasks.length === 0 ? (
+                          <p className="text-sm text-stone-600 py-2">次の一手が未設定です。下の「+このプロジェクトのタスク」で追加し、一覧で編集して「次の一手」に指定してください。</p>
+                        ) : (
+                          nextActionTasks.map(t => (
+                            <TaskRow key={t.id} task={t} onDone={() => markDoneWithNextAction(t)} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} onSetNextAction={setNextAction} />
+                          ))
+                        );
+                      })()}
+                    </section>
+                  )}
 
                   {/* 流れ */}
                   <section className="mb-5">
@@ -995,7 +1230,7 @@ export default function Board() {
                     </h3>
                     {relatedTasks.length === 0
                       ? <p className="text-sm text-stone-600 py-4 text-center">なし</p>
-                      : relatedTasks.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} />)
+                      : relatedTasks.map(t => <TaskRow key={t.id} task={t} onDone={t.is_next_action ? () => markDoneWithNextAction(t) : markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} onSetNextAction={setNextAction} />)
                     }
                   </section>
                 </>
@@ -1007,26 +1242,113 @@ export default function Board() {
                   </div>
                   {projects.length === 0
                     ? <p className="text-sm text-stone-600 py-8 text-center">プロジェクトなし</p>
-                    : (
-                      <div className="flex flex-col gap-3">
-                        {(['active', 'waiting', 'stalled', 'done'] as ProjectStatus[]).map(st => {
-                          const group = projects.filter(p => p.status === st);
-                          if (group.length === 0) return null;
-                          return (
-                            <div key={st}>
-                              <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${PROJECT_STATUS_COLOR[st]}`}>
-                                {PROJECT_STATUS_LABEL[st]} ({group.length})
-                              </p>
-                              <div className="flex flex-col gap-2">
-                                {group.map(p => (
-                                  <ProjectCard key={p.id} project={p} onClick={() => setSelectedProject(p)} />
-                                ))}
+                    : (() => {
+                        const soudanProjects = projects.filter(p => p.category === '相談')
+                          .sort((a, b) => {
+                            const aOpen = a.danger_flag && !a.danger_ack ? 0 : 1;
+                            const bOpen = b.danger_flag && !b.danger_ack ? 0 : 1;
+                            if (aOpen !== bOpen) return aOpen - bOpen;
+                            return (b.activity_date ?? '') < (a.activity_date ?? '') ? -1 : 1;
+                          });
+                        const activeProjects = projects.filter(p => p.category !== '相談' && p.kind !== 'routine' && p.status !== 'done');
+                        const routineProjects = projects.filter(p => p.category !== '相談' && p.kind === 'routine' && p.status !== 'done');
+                        const doneProjects = projects.filter(p => p.category !== '相談' && p.status === 'done');
+                        const focusGroup = activeProjects.filter(p => p.status === 'focus')
+                          .sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999));
+                        const scheduledGroup = activeProjects.filter(p => p.status === 'scheduled')
+                          .sort((a, b) => (a.due_date ?? '9999') < (b.due_date ?? '9999') ? -1 : 1);
+                        const waitingGroup = activeProjects.filter(p => p.status === 'waiting')
+                          .sort((a, b) => (a.follow_up_date ?? '9999') < (b.follow_up_date ?? '9999') ? -1 : 1);
+                        const seedGroup = activeProjects.filter(p => p.status === 'seed')
+                          .sort((a, b) => (b.activity_date ?? '') < (a.activity_date ?? '') ? -1 : 1);
+                        return (
+                          <div className="flex flex-col gap-6">
+                            {soudanProjects.length > 0 && (
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wider mb-2 text-pink-400">
+                                  💬 相談 ({soudanProjects.length})
+                                  {soudanProjects.some(p => p.danger_flag && !p.danger_ack) && (
+                                    <span className="ml-2 text-red-400">🔴 要確認 {soudanProjects.filter(p => p.danger_flag && !p.danger_ack).length}件</span>
+                                  )}
+                                </p>
+                                <div className="flex flex-col gap-2">
+                                  {soudanProjects.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelectedProject(p)} />)}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )
+                            )}
+                            {focusGroup.length > 0 && (
+                              <div>
+                                <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${PROJECT_STATUS_COLOR.focus}`}>
+                                  {PROJECT_STATUS_LABEL.focus} ({focusGroup.length})
+                                  {focusGroup.length > FOCUS_SOFT_LIMIT && (
+                                    <span className="ml-2 text-stone-500 normal-case font-normal">
+                                      {focusGroup.length}件＝全部は進みにくいかも
+                                    </span>
+                                  )}
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {focusGroup.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelectedProject(p)} />)}
+                                </div>
+                              </div>
+                            )}
+                            {scheduledGroup.length > 0 && (
+                              <div>
+                                <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${PROJECT_STATUS_COLOR.scheduled}`}>
+                                  {PROJECT_STATUS_LABEL.scheduled} ({scheduledGroup.length})
+                                </p>
+                                <div className="flex flex-col gap-2">
+                                  {scheduledGroup.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelectedProject(p)} />)}
+                                </div>
+                              </div>
+                            )}
+                            {waitingGroup.length > 0 && (
+                              <div>
+                                <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${PROJECT_STATUS_COLOR.waiting}`}>
+                                  {PROJECT_STATUS_LABEL.waiting} ({waitingGroup.length})
+                                </p>
+                                <div className="flex flex-col gap-2">
+                                  {waitingGroup.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelectedProject(p)} />)}
+                                </div>
+                              </div>
+                            )}
+                            {seedGroup.length > 0 && (
+                              <div>
+                                <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${PROJECT_STATUS_COLOR.seed}`}>
+                                  {PROJECT_STATUS_LABEL.seed} ({seedGroup.length})
+                                </p>
+                                <div className="flex flex-col gap-2">
+                                  {seedGroup.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelectedProject(p)} />)}
+                                </div>
+                              </div>
+                            )}
+                            {routineProjects.length > 0 && (
+                              <div>
+                                <p className="text-xs font-semibold uppercase tracking-wider mb-2 text-stone-500">
+                                  ⚙️ 常設運用 ({routineProjects.length})
+                                </p>
+                                <div className="flex flex-col gap-2">
+                                  {routineProjects.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelectedProject(p)} />)}
+                                </div>
+                              </div>
+                            )}
+                            {doneProjects.length > 0 && (
+                              <div>
+                                <button
+                                  onClick={() => setShowDoneProjects(v => !v)}
+                                  className={`text-xs font-semibold uppercase tracking-wider mb-2 ${PROJECT_STATUS_COLOR.done} hover:text-stone-300 transition-colors`}
+                                >
+                                  {showDoneProjects ? '▲' : '▼'} {PROJECT_STATUS_LABEL.done} ({doneProjects.length})
+                                </button>
+                                {showDoneProjects && (
+                                  <div className="flex flex-col gap-2">
+                                    {doneProjects.map(p => <ProjectCard key={p.id} project={p} onClick={() => setSelectedProject(p)} />)}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()
                   }
                 </>
               )}
@@ -1076,7 +1398,7 @@ export default function Board() {
                     ⚙️ 進行中
                     <span className="ml-2 text-stone-600 font-normal normal-case">({inProgress.length})</span>
                   </h2>
-                  {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} />)}
+                  {inProgress.map(t => <TaskRow key={t.id} task={t} onDone={t.is_next_action ? () => markDoneWithNextAction(t) : markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} onSetNextAction={setNextAction} />)}
                 </section>
               )}
 
@@ -1085,17 +1407,17 @@ export default function Board() {
                 {activeTab === 'today' && (
                   today.length === 0
                     ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
-                    : today.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} />)
+                    : today.map(t => <TaskRow key={t.id} task={t} onDone={t.is_next_action ? () => markDoneWithNextAction(t) : markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} onSetNextAction={setNextAction} />)
                 )}
                 {activeTab === 'upcoming' && (
                   upcoming.length === 0
                     ? <p className="text-sm text-stone-600 py-4 text-center">締切のタスクなし</p>
-                    : upcoming.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} onMarkToday={markToday} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} />)
+                    : upcoming.map(t => <TaskRow key={t.id} task={t} onDone={t.is_next_action ? () => markDoneWithNextAction(t) : markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} onMarkToday={markToday} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} onSetNextAction={setNextAction} />)
                 )}
                 {activeTab === 'someday' && (
                   someday.length === 0
                     ? <p className="text-sm text-stone-600 py-4 text-center">タスクなし</p>
-                    : someday.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} onMarkToday={markToday} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} />)
+                    : someday.map(t => <TaskRow key={t.id} task={t} onDone={t.is_next_action ? () => markDoneWithNextAction(t) : markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} onMarkToday={markToday} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} onSetNextAction={setNextAction} />)
                 )}
               </section>
 
@@ -1107,7 +1429,7 @@ export default function Board() {
                 </h2>
                 {waiting.length === 0
                   ? <p className="text-sm text-stone-600 py-4 text-center">なし</p>
-                  : waiting.map(t => <TaskRow key={t.id} task={t} onDone={markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} />)
+                  : waiting.map(t => <TaskRow key={t.id} task={t} onDone={t.is_next_action ? () => markDoneWithNextAction(t) : markDone} onStart={markStarted} onEdit={editTask} onDelete={deleteTask} project={t.project_id ? projectsById.get(t.project_id) : undefined} onOpenProject={openProject} onSetNextAction={setNextAction} />)
                 }
               </section>
 
