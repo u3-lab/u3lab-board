@@ -515,12 +515,12 @@ export default function Board() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [showDone, setShowDone] = useState(false);
-  const [activeNav, setActiveNav] = useState<'tasks' | 'projects' | 'reels'>('tasks');
+  const [activeNav, setActiveNav] = useState<'tasks' | 'projects'>('tasks');
 
-  // ?tab=reels などでの深いリンク（レビュー用URL共有のため・2026-07-10）
+  // ?tab=projects などでの深いリンク（レビュー用URL共有のため・2026-07-10）
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get('tab');
-    if (tab === 'reels' || tab === 'projects' || tab === 'tasks') setActiveNav(tab);
+    if (tab === 'projects' || tab === 'tasks') setActiveNav(tab);
   }, []);
   const [reels, setReels] = useState<Reel[]>([]);
   const [reelsView, setReelsView] = useState<'alert' | 'kanban' | 'calendar'>('alert');
@@ -773,17 +773,6 @@ export default function Board() {
               </span>
             )}
           </div>
-          <div
-            onClick={() => setActiveNav('reels')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-sm cursor-pointer ${activeNav === 'reels' ? 'text-stone-100 bg-stone-700' : 'text-stone-400 hover:bg-stone-700'}`}
-          >
-            🎬 配信
-            {reels.length > 0 && (
-              <span className="ml-auto text-xs bg-stone-700 text-stone-400 px-1.5 py-0.5 rounded-full">
-                {reels.length}
-              </span>
-            )}
-          </div>
           {activeNav === 'tasks' && (
             <>
               <div className="border-t border-stone-700 mt-2 pt-2">
@@ -811,15 +800,6 @@ export default function Board() {
         <main className="flex-1 p-6 max-w-3xl">
           {loading ? (
             <p className="text-sm text-stone-600 text-center py-12">読み込み中...</p>
-          ) : activeNav === 'reels' ? (
-            <ReelsView
-              reels={reels}
-              view={reelsView}
-              month={reelMonth}
-              onViewChange={setReelsView}
-              onMonthChange={setReelMonth}
-              onOpen={setSelectedReel}
-            />
           ) : activeNav === 'projects' ? (
             <>
               {selectedProject ? (
