@@ -32,5 +32,8 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // /api/cron/* is excluded: Vercel Cron never sends Basic Auth, and route.ts
+  // already gates it with CRON_SECRET (Bearer) — see saku memory
+  // project_board_cron_middleware_selfblock_20260717.md
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/cron).*)'],
 };
