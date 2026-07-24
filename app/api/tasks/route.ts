@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase';
 import { Task } from '@/lib/types';
-import { writeTaskToDraftCalendar, deleteDraftCalendarEvent } from '@/lib/gcal-draft';
+import { deleteDraftCalendarEvent } from '@/lib/gcal-draft';
 
 // GET /api/tasks                    → non-archived tasks
 // GET /api/tasks?completed_today=true → today's done tasks (JST)
@@ -66,20 +66,11 @@ export async function PATCH(req: NextRequest) {
   const { data, error } = await db.from('tasks').update(updates).eq('id', id).select().single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // イベント駆動での02行動_下書きカレンダー反映（完了時のみ・冪等・失敗しても完了処理自体は継続）
-  // gcal_event_id 済みなら二重書き込み防止でskip（PATCHの再呼び出し等に対して安全）。
-  // 失敗時は gcal_event_id が未設定のまま残り、daily-gcal-draft のバックアップ網が翌日拾う。
-  if (body.status === 'done' && data && !data.gcal_event_id) {
-    try {
-      const gcalEventId = await writeTaskToDraftCalendar(data as Task);
-      if (gcalEventId) {
-        await db.from('tasks').update({ gcal_event_id: gcalEventId }).eq('id', id);
-        data.gcal_event_id = gcalEventId;
-      }
-    } catch (e) {
-      console.error('gcal draft write failed (non-fatal, daily backup will retry):', e);
-    }
-  }
+  // 2026-07-24無効化(海GO): 「done遷移時に即書き込み」は時間窓の区別が無く、
+  // 過去タスクの事務的クローズ(Cockpit移行等)も「今起きた完了行動」として
+  // 02行動_下書きへ誤投入する事故が発生した(2026-07-23夜)。旧board自体が廃止
+  // 方向のため、時間窓ガードの延命ではなくフックそのものを無効化する。
+  // (旧コード: gcal_event_id未設定でstatus==='done'ならwriteTaskToDraftCalendar呼び出し)
 
   // undo（完了取り消し）時：保存済みイベントがあれば削除してgcal_event_idをクリア（冪等・失敗しても継続）
   if (body.status && body.status !== 'done' && data && data.gcal_event_id) {
